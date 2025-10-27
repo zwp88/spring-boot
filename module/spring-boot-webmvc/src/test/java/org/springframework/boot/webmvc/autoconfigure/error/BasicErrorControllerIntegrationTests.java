@@ -21,6 +21,7 @@ import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
+import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.net.URI;
 import java.util.ArrayList;
@@ -32,6 +33,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -39,14 +41,12 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
 import org.springframework.boot.autoconfigure.context.PropertyPlaceholderAutoConfiguration;
-import org.springframework.boot.freemarker.autoconfigure.FreeMarkerAutoConfiguration;
 import org.springframework.boot.http.converter.autoconfigure.HttpMessageConvertersAutoConfiguration;
-import org.springframework.boot.testsupport.classpath.resources.WithResource;
+import org.springframework.boot.resttestclient.TestRestTemplate;
 import org.springframework.boot.tomcat.autoconfigure.servlet.TomcatServletWebServerAutoConfiguration;
 import org.springframework.boot.web.error.ErrorAttributeOptions;
 import org.springframework.boot.web.error.ErrorAttributeOptions.Include;
 import org.springframework.boot.web.server.autoconfigure.ServerProperties;
-import org.springframework.boot.web.server.test.client.TestRestTemplate;
 import org.springframework.boot.webmvc.autoconfigure.DispatcherServletAutoConfiguration;
 import org.springframework.boot.webmvc.autoconfigure.WebMvcAutoConfiguration;
 import org.springframework.boot.webmvc.error.ErrorAttributes;
@@ -83,7 +83,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class BasicErrorControllerIntegrationTests {
 
-	private ConfigurableApplicationContext context;
+	private @Nullable ConfigurableApplicationContext context;
 
 	@AfterEach
 	void closeContext() {
@@ -327,18 +327,6 @@ class BasicErrorControllerIntegrationTests {
 	}
 
 	@Test
-	@WithResource(name = "templates/error/507.ftlh", content = "We are out of storage")
-	void testConventionTemplateMapping() {
-		load();
-		RequestEntity<?> request = RequestEntity.get(URI.create(createUrl("/noStorage")))
-			.accept(MediaType.TEXT_HTML)
-			.build();
-		ResponseEntity<String> entity = new TestRestTemplate().exchange(request, String.class);
-		String resp = entity.getBody();
-		assertThat(resp).contains("We are out of storage");
-	}
-
-	@Test
 	void testIncompatibleMediaType() {
 		load();
 		RequestEntity<?> request = RequestEntity.get(URI.create(createUrl("/incompatibleType")))
@@ -362,8 +350,9 @@ class BasicErrorControllerIntegrationTests {
 		assertThat(entity.getBody()).doesNotContainKey("status");
 	}
 
-	private void assertErrorAttributes(Map<?, ?> content, String status, String error, Class<?> exception,
-			String message, String path) {
+	private void assertErrorAttributes(@Nullable Map<?, ?> content, String status, String error,
+			@Nullable Class<?> exception, @Nullable String message, String path) {
+		assertThat(content).isNotNull();
 		assertThat(content.get("status")).as("Wrong status").hasToString(status);
 		assertThat(content.get("error")).as("Wrong error").isEqualTo(error);
 		if (exception != null) {
@@ -377,7 +366,9 @@ class BasicErrorControllerIntegrationTests {
 	}
 
 	private String createUrl(String path) {
-		int port = this.context.getEnvironment().getProperty("local.server.port", int.class);
+		assertThat(this.context).isNotNull();
+		Integer port = this.context.getEnvironment().getProperty("local.server.port", Integer.class);
+		assertThat(port).isNotNull();
 		return "http://localhost:" + port + path;
 	}
 
@@ -406,7 +397,7 @@ class BasicErrorControllerIntegrationTests {
 
 	@Configuration(proxyBeanMethods = false)
 	@MinimalWebConfiguration
-	@ImportAutoConfiguration(FreeMarkerAutoConfiguration.class)
+	// @ImportAutoConfiguration(FreeMarkerAutoConfiguration.class)
 	public static class TestConfiguration {
 
 		// For manual testing
@@ -463,19 +454,15 @@ class BasicErrorControllerIntegrationTests {
 			String bind(@RequestAttribute(required = false) String foo) throws Exception {
 				BindException error = new BindException(this, "test");
 				error.rejectValue("foo", "bar.error");
-				Parameter fooParameter = ReflectionUtils.findMethod(Errors.class, "bind", String.class)
-					.getParameters()[0];
+				Method method = ReflectionUtils.findMethod(Errors.class, "bind", String.class);
+				assertThat(method).isNotNull();
+				Parameter fooParameter = method.getParameters()[0];
 				throw new MethodArgumentNotValidException(MethodParameter.forParameter(fooParameter), error);
 			}
 
 			@PostMapping(path = "/bodyValidation", produces = "application/json")
 			String bodyValidation(@Valid @RequestBody DummyBody body) {
 				return body.content;
-			}
-
-			@RequestMapping(path = "/noStorage")
-			String noStorage() {
-				throw new InsufficientStorageException();
 			}
 
 			@RequestMapping(path = "/incompatibleType", produces = "text/plain")
@@ -486,11 +473,6 @@ class BasicErrorControllerIntegrationTests {
 			@ResponseStatus(value = HttpStatus.BAD_REQUEST, reason = "Expected!")
 			@SuppressWarnings("serial")
 			static class ExpectedException extends RuntimeException {
-
-			}
-
-			@ResponseStatus(HttpStatus.INSUFFICIENT_STORAGE)
-			static class InsufficientStorageException extends RuntimeException {
 
 			}
 
@@ -507,6 +489,7 @@ class BasicErrorControllerIntegrationTests {
 			static class DummyBody {
 
 				@NotNull
+				@SuppressWarnings("NullAway.Init")
 				private String content;
 
 				String getContent() {

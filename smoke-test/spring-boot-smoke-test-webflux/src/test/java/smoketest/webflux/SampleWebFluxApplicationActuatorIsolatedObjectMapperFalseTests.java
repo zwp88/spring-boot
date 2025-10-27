@@ -16,11 +16,12 @@
 
 package smoketest.webflux;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.ObjectMapper;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webtestclient.AutoConfigureWebTestClient;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.web.reactive.server.WebTestClient;
@@ -31,21 +32,25 @@ import org.springframework.test.web.reactive.server.WebTestClient;
  * @author Phillip Webb
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-		properties = "management.endpoints.jackson.isolated-object-mapper=false")
+		properties = { "management.endpoints.jackson.isolated-object-mapper=false",
+				"spring.jackson.mapper.require-setters-for-getters=true" })
 @ContextConfiguration(loader = ApplicationStartupSpringBootContextLoader.class)
+@AutoConfigureWebTestClient
 class SampleWebFluxApplicationActuatorIsolatedObjectMapperFalseTests {
 
 	@Autowired
 	private WebTestClient webClient;
 
 	@Test
-	void linksEndpointShouldBeAvailable() {
+	void bodyIsEmptyDueToMainJsonMapperRequiringSettersForGetters() {
 		this.webClient.get()
 			.uri("/actuator/startup")
 			.accept(MediaType.APPLICATION_JSON)
 			.exchange()
 			.expectStatus()
-			.is5xxServerError();
+			.isOk()
+			.expectBody()
+			.json("{}");
 	}
 
 }

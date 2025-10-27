@@ -22,10 +22,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import com.tngtech.archunit.base.DescribedPredicate;
 import com.tngtech.archunit.core.domain.AccessTarget.CodeUnitCallTarget;
@@ -33,8 +35,13 @@ import com.tngtech.archunit.core.domain.JavaAnnotation;
 import com.tngtech.archunit.core.domain.JavaCall;
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaClass.Predicates;
+import com.tngtech.archunit.core.domain.JavaClasses;
+import com.tngtech.archunit.core.domain.JavaConstructor;
+import com.tngtech.archunit.core.domain.JavaField;
+import com.tngtech.archunit.core.domain.JavaMember;
 import com.tngtech.archunit.core.domain.JavaMethod;
 import com.tngtech.archunit.core.domain.JavaModifier;
+import com.tngtech.archunit.core.domain.JavaPackage;
 import com.tngtech.archunit.core.domain.JavaParameter;
 import com.tngtech.archunit.core.domain.JavaType;
 import com.tngtech.archunit.core.domain.properties.CanBeAnnotated;
@@ -43,8 +50,10 @@ import com.tngtech.archunit.core.domain.properties.HasName;
 import com.tngtech.archunit.core.domain.properties.HasOwner;
 import com.tngtech.archunit.core.domain.properties.HasOwner.Predicates.With;
 import com.tngtech.archunit.core.domain.properties.HasParameterTypes;
+import com.tngtech.archunit.lang.AbstractClassesTransformer;
 import com.tngtech.archunit.lang.ArchCondition;
 import com.tngtech.archunit.lang.ArchRule;
+import com.tngtech.archunit.lang.ClassesTransformer;
 import com.tngtech.archunit.lang.ConditionEvents;
 import com.tngtech.archunit.lang.SimpleConditionEvent;
 import com.tngtech.archunit.lang.syntax.ArchRuleDefinition;
@@ -65,8 +74,11 @@ import org.springframework.util.ResourceUtils;
  * @author Ivan Malutin
  * @author Phillip Webb
  * @author Ngoc Nhan
+ * @author Moritz Halbritter
  */
 final class ArchitectureRules {
+
+	private static final String AUTOCONFIGURATION_ANNOTATION = "org.springframework.boot.autoconfigure.AutoConfiguration";
 
 	private ArchitectureRules() {
 	}
@@ -93,16 +105,47 @@ final class ArchitectureRules {
 		rules.add(noClassesShouldCallStringToUpperCaseWithoutLocale());
 		rules.add(noClassesShouldCallStringToLowerCaseWithoutLocale());
 		rules.add(conditionalOnMissingBeanShouldNotSpecifyOnlyATypeThatIsTheSameAsMethodReturnType());
-		rules.add(enumSourceShouldNotSpecifyOnlyATypeThatIsTheSameAsMethodParameterType());
+		rules.add(enumSourceShouldNotHaveValueThatIsTheSameAsTypeOfMethodsFirstParameter());
 		rules.add(classLevelConfigurationPropertiesShouldNotSpecifyOnlyPrefixAttribute());
 		rules.add(methodLevelConfigurationPropertiesShouldNotSpecifyOnlyPrefixAttribute());
 		rules.add(conditionsShouldNotBePublic());
 		rules.add(allConfigurationPropertiesBindingBeanMethodsShouldBeStatic());
+		rules.add(autoConfigurationClassesShouldBePublicAndFinal());
+		rules.add(autoConfigurationClassesShouldHaveNoPublicMembers());
+		rules.add(testAutoConfigurationClassesShouldBePackagePrivateAndFinal());
 		return List.copyOf(rules);
 	}
 
+	static ArchRule allBeanMethodsShouldReturnNonPrivateType() {
+		return methodsThatAreAnnotatedWith("org.springframework.context.annotation.Bean").should(check(
+				"not return types declared with the %s modifier, as such types are incompatible with Spring AOT processing"
+					.formatted(JavaModifier.PRIVATE),
+				(method, events) -> {
+					JavaClass returnType = method.getRawReturnType();
+					if (returnType.getModifiers().contains(JavaModifier.PRIVATE)) {
+						addViolation(events, method, "%s returns %s which is declared as %s".formatted(
+								method.getDescription(), returnType.getDescription(), returnType.getModifiers()));
+					}
+				}))
+			.allowEmptyShould(true);
+	}
+
+	static ArchRule allBeanMethodsShouldNotHaveConditionalOnClassAnnotation(String annotationName) {
+		return methodsThatAreAnnotatedWith("org.springframework.context.annotation.Bean").should()
+			.notBeAnnotatedWith(annotationName)
+			.because("@ConditionalOnClass on @Bean methods is ineffective - it doesn't prevent "
+					+ "the method signature from being loaded. Such condition need to be placed"
+					+ " on a @Configuration class, allowing the condition to back off before the type is loaded.")
+			.allowEmptyShould(true);
+	}
+
 	private static ArchRule allPackagesShouldBeFreeOfTangles() {
-		return SlicesRuleDefinition.slices().matching("(**)").should().beFreeOfCycles();
+		return SlicesRuleDefinition.slices()
+			.matching("(**)")
+			.should()
+			.beFreeOfCycles()
+			.ignoreDependency("org.springframework.boot.env.EnvironmentPostProcessor",
+					"org.springframework.boot.SpringApplication");
 	}
 
 	private static ArchRule allBeanPostProcessorBeanMethodsShouldBeStaticAndNotCausePrematureInitialization() {
@@ -221,12 +264,18 @@ final class ArchitectureRules {
 			.allowEmptyShould(true);
 	}
 
+	static ArchRule packagesShouldBeAnnotatedWithNullMarked(Set<String> ignoredPackages) {
+		return ArchRuleDefinition.all(packages((javaPackage) -> !ignoredPackages.contains(javaPackage.getName())))
+			.should(beAnnotatedWithNullMarked())
+			.allowEmptyShould(true);
+	}
+
 	private static ArchCondition<? super JavaMethod> notSpecifyOnlyATypeThatIsTheSameAsTheMethodReturnType() {
 		return check("not specify only a type that is the same as the method's return type", (item, events) -> {
 			JavaAnnotation<JavaMethod> conditionalAnnotation = item
 				.getAnnotationOfType("org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean");
 			Map<String, Object> properties = conditionalAnnotation.getProperties();
-			if (!properties.containsKey("type") && !properties.containsKey("name")) {
+			if (!hasProperty("type", properties) && !hasProperty("name", properties)) {
 				conditionalAnnotation.get("value").ifPresent((value) -> {
 					if (containsOnlySingleType((JavaType[]) value, item.getReturnType())) {
 						addViolation(events, item, conditionalAnnotation.getDescription()
@@ -237,16 +286,24 @@ final class ArchitectureRules {
 		});
 	}
 
-	private static ArchRule enumSourceShouldNotSpecifyOnlyATypeThatIsTheSameAsMethodParameterType() {
+	private static boolean hasProperty(String name, Map<String, Object> properties) {
+		Object property = properties.get(name);
+		if (property == null) {
+			return false;
+		}
+		return !property.getClass().isArray() || ((Object[]) property).length > 0;
+	}
+
+	private static ArchRule enumSourceShouldNotHaveValueThatIsTheSameAsTypeOfMethodsFirstParameter() {
 		return ArchRuleDefinition.methods()
 			.that()
 			.areAnnotatedWith("org.junit.jupiter.params.provider.EnumSource")
-			.should(notSpecifyOnlyATypeThatIsTheSameAsTheMethodParameterType())
+			.should(notHaveValueThatIsTheSameAsTheTypeOfTheMethodsFirstParameter())
 			.allowEmptyShould(true);
 	}
 
-	private static ArchCondition<? super JavaMethod> notSpecifyOnlyATypeThatIsTheSameAsTheMethodParameterType() {
-		return check("not specify only a type that is the same as the method's parameter type",
+	private static ArchCondition<? super JavaMethod> notHaveValueThatIsTheSameAsTheTypeOfTheMethodsFirstParameter() {
+		return check("not have a value that is the same as the type of the method's first parameter",
 				ArchitectureRules::notSpecifyOnlyATypeThatIsTheSameAsTheMethodParameterType);
 	}
 
@@ -254,15 +311,13 @@ final class ArchitectureRules {
 			ConditionEvents events) {
 		JavaAnnotation<JavaMethod> enumSourceAnnotation = item
 			.getAnnotationOfType("org.junit.jupiter.params.provider.EnumSource");
-		Map<String, Object> properties = enumSourceAnnotation.getProperties();
-		if (properties.size() == 1 && item.getParameterTypes().size() == 1) {
-			enumSourceAnnotation.get("value").ifPresent((value) -> {
-				if (value.equals(item.getParameterTypes().get(0))) {
-					addViolation(events, item, enumSourceAnnotation.getDescription()
-							+ " should not specify only a value that is the same as the method's parameter type");
-				}
-			});
-		}
+		enumSourceAnnotation.get("value").ifPresent((value) -> {
+			JavaType parameterType = item.getParameterTypes().get(0);
+			if (value.equals(parameterType)) {
+				addViolation(events, item, enumSourceAnnotation.getDescription()
+						+ " should not specify a value that is the same as the type of the method's first parameter");
+			}
+		});
 	}
 
 	private static ArchRule classLevelConfigurationPropertiesShouldNotSpecifyOnlyPrefixAttribute() {
@@ -317,6 +372,93 @@ final class ArchitectureRules {
 			.should()
 			.beStatic()
 			.allowEmptyShould(true);
+	}
+
+	private static ArchRule autoConfigurationClassesShouldBePublicAndFinal() {
+		return ArchRuleDefinition.classes()
+			.that(areRegularAutoConfiguration())
+			.should()
+			.bePublic()
+			.andShould()
+			.haveModifier(JavaModifier.FINAL)
+			.allowEmptyShould(true);
+	}
+
+	private static ArchRule testAutoConfigurationClassesShouldBePackagePrivateAndFinal() {
+		return ArchRuleDefinition.classes()
+			.that(areTestAutoConfiguration())
+			.should()
+			.bePackagePrivate()
+			.andShould()
+			.haveModifier(JavaModifier.FINAL)
+			.allowEmptyShould(true);
+	}
+
+	private static ArchRule autoConfigurationClassesShouldHaveNoPublicMembers() {
+		return ArchRuleDefinition.members()
+			.that()
+			.areDeclaredInClassesThat(areRegularAutoConfiguration())
+			.and(areNotDefaultConstructors())
+			.and(areNotConstants())
+			.and(dontOverridePublicMethods())
+			.should()
+			.notBePublic()
+			.allowEmptyShould(true);
+	}
+
+	static ArchRule shouldHaveNoPublicMembers() {
+		return ArchRuleDefinition.members()
+			.that(areNotDefaultConstructors())
+			.and(areNotConstants())
+			.and(dontOverridePublicMethods())
+			.should()
+			.notBePublic()
+			.allowEmptyShould(true);
+	}
+
+	static DescribedPredicate<JavaClass> areRegularAutoConfiguration() {
+		return DescribedPredicate.describe("Regular @AutoConfiguration",
+				(javaClass) -> javaClass.isAnnotatedWith(AUTOCONFIGURATION_ANNOTATION)
+						&& !javaClass.getName().contains("TestAutoConfiguration") && !javaClass.isAnnotation());
+	}
+
+	static DescribedPredicate<JavaClass> areTestAutoConfiguration() {
+		return DescribedPredicate.describe("Test @AutoConfiguration",
+				(javaClass) -> javaClass.isAnnotatedWith(AUTOCONFIGURATION_ANNOTATION)
+						&& javaClass.getName().contains("TestAutoConfiguration") && !javaClass.isAnnotation());
+	}
+
+	private static DescribedPredicate<? super JavaMember> dontOverridePublicMethods() {
+		OverridesPublicMethod<JavaMember> predicate = new OverridesPublicMethod<>();
+		return DescribedPredicate.describe("don't override public methods", (member) -> !predicate.test(member));
+	}
+
+	private static DescribedPredicate<JavaMember> areNotDefaultConstructors() {
+		return DescribedPredicate.describe("aren't default constructors",
+				(member) -> !areDefaultConstructors().test(member));
+	}
+
+	private static DescribedPredicate<JavaMember> areDefaultConstructors() {
+		return DescribedPredicate.describe("are default constructors", (member) -> {
+			if (!(member instanceof JavaConstructor constructor)) {
+				return false;
+			}
+			return constructor.getParameters().isEmpty();
+		});
+	}
+
+	private static DescribedPredicate<JavaMember> areNotConstants() {
+		return DescribedPredicate.describe("aren't constants", (member) -> !areConstants().test(member));
+	}
+
+	private static DescribedPredicate<JavaMember> areConstants() {
+		return DescribedPredicate.describe("are constants", (member) -> {
+			if (member instanceof JavaField field) {
+				Set<JavaModifier> modifiers = field.getModifiers();
+				return modifiers.contains(JavaModifier.STATIC) && modifiers.contains(JavaModifier.FINAL);
+			}
+			return false;
+		});
 	}
 
 	private static boolean containsOnlySingleType(JavaType[] types, JavaType type) {
@@ -389,6 +531,62 @@ final class ArchitectureRules {
 
 	private static String shouldUse(String string) {
 		return string + " should be used instead";
+	}
+
+	static ClassesTransformer<JavaPackage> packages(Predicate<JavaPackage> filter) {
+		return new AbstractClassesTransformer<>("packages") {
+			@Override
+			public Iterable<JavaPackage> doTransform(JavaClasses collection) {
+				return collection.stream().map(JavaClass::getPackage).filter(filter).collect(Collectors.toSet());
+			}
+		};
+	}
+
+	private static ArchCondition<JavaPackage> beAnnotatedWithNullMarked() {
+		return new ArchCondition<>("be annotated with @NullMarked") {
+			@Override
+			public void check(JavaPackage item, ConditionEvents events) {
+				if (!item.isAnnotatedWith("org.jspecify.annotations.NullMarked")) {
+					String message = String.format("Package %s is not annotated with @NullMarked", item.getName());
+					events.add(SimpleConditionEvent.violated(item, message));
+				}
+			}
+		};
+	}
+
+	private static class OverridesPublicMethod<T extends JavaMember> extends DescribedPredicate<T> {
+
+		OverridesPublicMethod() {
+			super("overrides public method");
+		}
+
+		@Override
+		public boolean test(T member) {
+			if (!(member instanceof JavaMethod javaMethod)) {
+				return false;
+			}
+			Stream<JavaMethod> superClassMethods = member.getOwner()
+				.getAllRawSuperclasses()
+				.stream()
+				.flatMap((superClass) -> superClass.getMethods().stream());
+			Stream<JavaMethod> interfaceMethods = member.getOwner()
+				.getAllRawInterfaces()
+				.stream()
+				.flatMap((iface) -> iface.getMethods().stream());
+			return Stream.concat(superClassMethods, interfaceMethods)
+				.anyMatch((superMethod) -> isPublic(superMethod) && isOverridden(superMethod, javaMethod));
+		}
+
+		private boolean isPublic(JavaMethod method) {
+			return method.getModifiers().contains(JavaModifier.PUBLIC);
+		}
+
+		private boolean isOverridden(JavaMethod superMethod, JavaMethod method) {
+			return superMethod.getName().equals(method.getName())
+					&& superMethod.getRawParameterTypes().size() == method.getRawParameterTypes().size()
+					&& superMethod.getDescriptor().equals(method.getDescriptor());
+		}
+
 	}
 
 }

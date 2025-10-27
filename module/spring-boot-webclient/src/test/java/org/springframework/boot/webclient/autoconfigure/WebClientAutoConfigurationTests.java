@@ -20,6 +20,8 @@ import org.junit.jupiter.api.Test;
 
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.autoconfigure.ssl.SslAutoConfiguration;
+import org.springframework.boot.http.client.autoconfigure.HttpClientAutoConfiguration;
+import org.springframework.boot.http.client.autoconfigure.reactive.ReactiveHttpClientAutoConfiguration;
 import org.springframework.boot.http.codec.CodecCustomizer;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.boot.webclient.WebClientCustomizer;
@@ -37,13 +39,13 @@ import static org.mockito.Mockito.mock;
  * Tests for {@link WebClientAutoConfiguration}
  *
  * @author Brian Clozel
+ * @author Phillip Webb
  */
 class WebClientAutoConfigurationTests {
 
 	private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
-		.withConfiguration(AutoConfigurations.of(
-				org.springframework.boot.http.client.autoconfigure.reactive.ClientHttpConnectorAutoConfiguration.class,
-				WebClientAutoConfiguration.class, SslAutoConfiguration.class));
+		.withConfiguration(AutoConfigurations.of(ReactiveHttpClientAutoConfiguration.class,
+				HttpClientAutoConfiguration.class, WebClientAutoConfiguration.class, SslAutoConfiguration.class));
 
 	@Test
 	void shouldCreateBuilder() {

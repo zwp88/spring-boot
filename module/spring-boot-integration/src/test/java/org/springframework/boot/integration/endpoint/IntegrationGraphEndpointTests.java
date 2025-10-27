@@ -23,7 +23,8 @@ import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
-import org.springframework.boot.integration.endpoint.IntegrationGraphEndpoint.GraphDescriptor;
+import org.springframework.boot.integration.actuate.endpoint.IntegrationGraphEndpoint;
+import org.springframework.boot.integration.actuate.endpoint.IntegrationGraphEndpoint.GraphDescriptor;
 import org.springframework.integration.graph.Graph;
 import org.springframework.integration.graph.IntegrationGraphServer;
 import org.springframework.integration.graph.IntegrationNode;
@@ -52,9 +53,9 @@ class IntegrationGraphEndpointTests {
 		Map<String, Object> contentDescriptor = new LinkedHashMap<>();
 		Collection<IntegrationNode> nodes = new ArrayList<>();
 		Collection<LinkNode> links = new ArrayList<>();
-		given(graph.getContentDescriptor()).willReturn(contentDescriptor);
-		given(graph.getNodes()).willReturn(nodes);
-		given(graph.getLinks()).willReturn(links);
+		given(graph.contentDescriptor()).willReturn(contentDescriptor);
+		given(graph.nodes()).willReturn(nodes);
+		given(graph.links()).willReturn(links);
 		given(this.server.getGraph()).willReturn(graph);
 		GraphDescriptor descriptor = this.endpoint.graph();
 		then(this.server).should().getGraph();

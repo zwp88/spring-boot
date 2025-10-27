@@ -22,12 +22,20 @@ plugins {
 description = "Spring Boot Artemis smoke test"
 
 dependencies {
+	implementation(project(":starter:spring-boot-starter-artemis"))
+
 	dockerTestImplementation(project(":starter:spring-boot-starter-test"))
 	dockerTestImplementation(project(":core:spring-boot-testcontainers"))
 	dockerTestImplementation(project(":test-support:spring-boot-docker-test-support"))
 	dockerTestImplementation("org.awaitility:awaitility")
-	dockerTestImplementation("org.testcontainers:junit-jupiter")
-	dockerTestImplementation("org.testcontainers:activemq")
+	dockerTestImplementation("org.testcontainers:testcontainers-activemq")
+	dockerTestImplementation("org.testcontainers:testcontainers-junit-jupiter")
+}
 
-	implementation(project(":starter:spring-boot-starter-artemis"))
+tasks.named("compileTestJava") {
+	options.nullability.checking = "tests"
+}
+
+tasks.named("compileDockerTestJava") {
+	options.nullability.checking = "tests"
 }

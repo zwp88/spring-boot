@@ -40,13 +40,13 @@ import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.annotation.AfterReturning;
 import org.aspectj.lang.annotation.Aspect;
 import org.assertj.core.api.InstanceOfAssertFactories;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 
 import org.springframework.aop.support.AopUtils;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.autoconfigure.context.PropertyPlaceholderAutoConfiguration;
 import org.springframework.boot.autoconfigure.task.TaskExecutionAutoConfiguration;
-import org.springframework.boot.http.converter.autoconfigure.HttpMessageConverters;
 import org.springframework.boot.http.converter.autoconfigure.HttpMessageConvertersAutoConfiguration;
 import org.springframework.boot.servlet.filter.OrderedFormContentFilter;
 import org.springframework.boot.test.context.assertj.AssertableWebApplicationContext;
@@ -83,16 +83,26 @@ import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.converter.HttpMessageConverter;
+import org.springframework.http.server.RequestPath;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.util.StringUtils;
 import org.springframework.validation.Validator;
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
+import org.springframework.web.accept.ApiVersionDeprecationHandler;
+import org.springframework.web.accept.ApiVersionParser;
+import org.springframework.web.accept.ApiVersionResolver;
+import org.springframework.web.accept.ApiVersionStrategy;
 import org.springframework.web.accept.ContentNegotiationManager;
+import org.springframework.web.accept.DefaultApiVersionStrategy;
 import org.springframework.web.accept.FixedContentNegotiationStrategy;
+import org.springframework.web.accept.InvalidApiVersionException;
+import org.springframework.web.accept.MissingApiVersionException;
 import org.springframework.web.accept.ParameterContentNegotiationStrategy;
+import org.springframework.web.accept.StandardApiVersionDeprecationHandler;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.support.ConfigurableWebBindingInitializer;
+import org.springframework.web.context.WebApplicationContext;
 import org.springframework.web.context.support.AnnotationConfigWebApplicationContext;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.web.filter.FormContentFilter;
@@ -141,9 +151,11 @@ import org.springframework.web.servlet.support.SessionFlashMapManager;
 import org.springframework.web.servlet.view.AbstractView;
 import org.springframework.web.servlet.view.ContentNegotiatingViewResolver;
 import org.springframework.web.servlet.view.DefaultRequestToViewNameTranslator;
+import org.springframework.web.util.ServletRequestPathUtils;
 import org.springframework.web.util.UrlPathHelper;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.mockito.Mockito.mock;
 
 /**
@@ -174,8 +186,7 @@ class WebMvcAutoConfigurationTests {
 	void handlerAdaptersCreated() {
 		this.contextRunner.run((context) -> {
 			assertThat(context).getBeans(HandlerAdapter.class).hasSize(4);
-			assertThat(context.getBean(RequestMappingHandlerAdapter.class).getMessageConverters()).isNotEmpty()
-				.isEqualTo(context.getBean(HttpMessageConverters.class).getConverters());
+			assertThat(context.getBean(RequestMappingHandlerAdapter.class).getMessageConverters()).isNotEmpty();
 		});
 	}
 
@@ -334,14 +345,16 @@ class WebMvcAutoConfigurationTests {
 			.run((loader) -> {
 				// mock request and set user preferred locale
 				MockHttpServletRequest request = new MockHttpServletRequest();
-				request.addPreferredLocale(StringUtils.parseLocaleString("nl_NL"));
+				Locale locale = StringUtils.parseLocaleString("nl_NL");
+				assertThat(locale).isNotNull();
+				request.addPreferredLocale(locale);
 				request.addHeader(HttpHeaders.ACCEPT_LANGUAGE, "nl_NL");
 				LocaleResolver localeResolver = loader.getBean(LocaleResolver.class);
 				assertThat(localeResolver).isInstanceOf(FixedLocaleResolver.class);
-				Locale locale = localeResolver.resolveLocale(request);
+				Locale resolvedLocale = localeResolver.resolveLocale(request);
 				// test locale resolver uses fixed locale and not user preferred
 				// locale
-				assertThat(locale).hasToString("en_UK");
+				assertThat(resolvedLocale).hasToString("en_UK");
 			});
 	}
 
@@ -350,13 +363,15 @@ class WebMvcAutoConfigurationTests {
 		this.contextRunner.withPropertyValues("spring.web.locale:en_UK").run((loader) -> {
 			// mock request and set user preferred locale
 			MockHttpServletRequest request = new MockHttpServletRequest();
-			request.addPreferredLocale(StringUtils.parseLocaleString("nl_NL"));
+			Locale locale = StringUtils.parseLocaleString("nl_NL");
+			assertThat(locale).isNotNull();
+			request.addPreferredLocale(locale);
 			request.addHeader(HttpHeaders.ACCEPT_LANGUAGE, "nl_NL");
 			LocaleResolver localeResolver = loader.getBean(LocaleResolver.class);
 			assertThat(localeResolver).isInstanceOf(AcceptHeaderLocaleResolver.class);
-			Locale locale = localeResolver.resolveLocale(request);
+			Locale resolvedLocale = localeResolver.resolveLocale(request);
 			// test locale resolver uses user preferred locale
-			assertThat(locale).hasToString("nl_NL");
+			assertThat(resolvedLocale).hasToString("nl_NL");
 		});
 	}
 
@@ -586,9 +601,13 @@ class WebMvcAutoConfigurationTests {
 			.run((context) -> assertThat(context.getBean(RequestMappingHandlerAdapter.class))
 				.extracting("contentNegotiationManager",
 						InstanceOfAssertFactories.type(ContentNegotiationManager.class))
-				.satisfies((contentNegotiationManager) -> assertThat(
-						contentNegotiationManager.getStrategy(FixedContentNegotiationStrategy.class).getContentTypes())
-					.containsExactly(MediaType.APPLICATION_JSON, MediaType.APPLICATION_XML)));
+				.satisfies((contentNegotiationManager) -> {
+					FixedContentNegotiationStrategy strategy = contentNegotiationManager
+						.getStrategy(FixedContentNegotiationStrategy.class);
+					assertThat(strategy).isNotNull();
+					assertThat(strategy.getContentTypes()).containsExactly(MediaType.APPLICATION_JSON,
+							MediaType.APPLICATION_XML);
+				}));
 	}
 
 	@Test
@@ -711,6 +730,7 @@ class WebMvcAutoConfigurationTests {
 				WelcomePageHandlerMapping bean = context.getBean(WelcomePageHandlerMapping.class);
 				UrlBasedCorsConfigurationSource source = (UrlBasedCorsConfigurationSource) bean
 					.getCorsConfigurationSource();
+				assertThat(source).isNotNull();
 				assertThat(source.getCorsConfigurations()).containsKey("/**");
 			});
 	}
@@ -960,7 +980,9 @@ class WebMvcAutoConfigurationTests {
 					SimpleUrlHandlerMapping.class);
 			DispatcherServlet extraDispatcherServlet = context.getBean("extraDispatcherServlet",
 					DispatcherServlet.class);
-			SimpleUrlHandlerMapping extraResourceHandlerMapping = extraDispatcherServlet.getWebApplicationContext()
+			WebApplicationContext webApplicationContext = extraDispatcherServlet.getWebApplicationContext();
+			assertThat(webApplicationContext).isNotNull();
+			SimpleUrlHandlerMapping extraResourceHandlerMapping = webApplicationContext
 				.getBean("resourceHandlerMapping", SimpleUrlHandlerMapping.class);
 			assertThat(resourceHandlerMapping).isNotSameAs(extraResourceHandlerMapping);
 			assertThat(resourceHandlerMapping.getUrlMap()).containsKey("/**");
@@ -1007,6 +1029,92 @@ class WebMvcAutoConfigurationTests {
 						OrderedControllerAdviceBeansConfiguration.LowestOrderedControllerAdvice.class));
 	}
 
+	@Test
+	void apiVersionPropertiesAreApplied() {
+		this.contextRunner
+			.withPropertyValues("spring.mvc.apiversion.use.header=version", "spring.mvc.apiversion.required=true",
+					"spring.mvc.apiversion.supported=123,456", "spring.mvc.apiversion.detect-supported=false")
+			.run((context) -> {
+				DefaultApiVersionStrategy versionStrategy = context.getBean("mvcApiVersionStrategy",
+						DefaultApiVersionStrategy.class);
+				assertThatExceptionOfType(MissingApiVersionException.class)
+					.isThrownBy(() -> versionStrategy.validateVersion(null, new MockHttpServletRequest()));
+				assertThatExceptionOfType(InvalidApiVersionException.class).isThrownBy(() -> versionStrategy
+					.validateVersion(versionStrategy.parseVersion("789"), new MockHttpServletRequest()));
+				assertThat(versionStrategy.detectSupportedVersions()).isFalse();
+			});
+	}
+
+	@Test
+	void apiVersionDefaultVersionPropertyIsApplied() {
+		this.contextRunner
+			.withPropertyValues("spring.mvc.apiversion.use.header=version", "spring.mvc.apiversion.default=1.0.0")
+			.run((context) -> {
+				DefaultApiVersionStrategy versionStrategy = context.getBean("mvcApiVersionStrategy",
+						DefaultApiVersionStrategy.class);
+				versionStrategy.addSupportedVersion("1.0.0");
+				Comparable<?> version = versionStrategy.parseVersion("1.0.0");
+				assertThat(versionStrategy.getDefaultVersion()).isEqualTo(version);
+				versionStrategy.validateVersion(version, new MockHttpServletRequest());
+				versionStrategy.validateVersion(null, new MockHttpServletRequest());
+			});
+	}
+
+	@Test
+	void apiVersionUseHeaderPropertyIsApplied() {
+		this.contextRunner.withPropertyValues("spring.mvc.apiversion.use.header=hv").run((context) -> {
+			ApiVersionStrategy versionStrategy = context.getBean("mvcApiVersionStrategy", ApiVersionStrategy.class);
+			MockHttpServletRequest request = new MockHttpServletRequest();
+			request.addHeader("hv", "123");
+			assertThat(versionStrategy.resolveVersion(request)).isEqualTo("123");
+		});
+	}
+
+	@Test
+	void apiVersionUseQueryParameterPropertyIsApplied() {
+		this.contextRunner.withPropertyValues("spring.mvc.apiversion.use.query-parameter=rpv").run((context) -> {
+			ApiVersionStrategy versionStrategy = context.getBean("mvcApiVersionStrategy", ApiVersionStrategy.class);
+			MockHttpServletRequest request = new MockHttpServletRequest();
+			request.setQueryString("rpv=123");
+			assertThat(versionStrategy.resolveVersion(request)).isEqualTo("123");
+		});
+	}
+
+	@Test
+	void apiVersionUsePathSegmentPropertyIsApplied() {
+		this.contextRunner.withPropertyValues("spring.mvc.apiversion.use.path-segment=1").run((context) -> {
+			ApiVersionStrategy versionStrategy = context.getBean("mvcApiVersionStrategy", ApiVersionStrategy.class);
+			MockHttpServletRequest request = new MockHttpServletRequest("GET", "https://example.com/test/123");
+			ServletRequestPathUtils.setParsedRequestPath(RequestPath.parse("/test/123", "/"), request);
+			assertThat(versionStrategy.resolveVersion(request)).isEqualTo("123");
+		});
+	}
+
+	@Test
+	void apiVersionUseMediaTypeParameterPropertyIsApplied() {
+		this.contextRunner.withPropertyValues("spring.mvc.apiversion.use.media-type-parameter[application/json]=mtpv")
+			.run((context) -> {
+				ApiVersionStrategy versionStrategy = context.getBean("mvcApiVersionStrategy", ApiVersionStrategy.class);
+				MockHttpServletRequest request = new MockHttpServletRequest();
+				request.addHeader(HttpHeaders.CONTENT_TYPE, "application/json;mtpv=123");
+				assertThat(versionStrategy.resolveVersion(request)).isEqualTo("123");
+			});
+	}
+
+	@Test
+	void apiVersionBeansAreInjected() {
+		this.contextRunner.withUserConfiguration(ApiVersionConfiguration.class).run((context) -> {
+			DefaultApiVersionStrategy versionStrategy = context.getBean("mvcApiVersionStrategy",
+					DefaultApiVersionStrategy.class);
+			assertThat(versionStrategy).extracting("versionResolvers")
+				.asInstanceOf(InstanceOfAssertFactories.LIST)
+				.containsExactly(context.getBean(ApiVersionResolver.class));
+			assertThat(versionStrategy).extracting("deprecationHandler")
+				.isEqualTo(context.getBean(ApiVersionDeprecationHandler.class));
+			assertThat(versionStrategy).extracting("versionParser").isEqualTo(context.getBean(ApiVersionParser.class));
+		});
+	}
+
 	private void assertResourceHttpRequestHandler(AssertableWebApplicationContext context,
 			Consumer<ResourceHttpRequestHandler> handlerConsumer) {
 		Map<String, Object> handlerMap = getHandlerMap(context.getBean("resourceHandlerMapping", HandlerMapping.class));
@@ -1032,12 +1140,14 @@ class WebMvcAutoConfigurationTests {
 			.getBean("resourceHandlerMapping", SimpleUrlHandlerMapping.class)
 			.getHandlerMap()
 			.get(mapping);
+		assertThat(resourceHandler).isNotNull();
 		return resourceHandler.getResourceResolvers();
 	}
 
 	protected List<ResourceTransformer> getResourceTransformers(ApplicationContext context, String mapping) {
 		SimpleUrlHandlerMapping handler = context.getBean("resourceHandlerMapping", SimpleUrlHandlerMapping.class);
 		ResourceHttpRequestHandler resourceHandler = (ResourceHttpRequestHandler) handler.getHandlerMap().get(mapping);
+		assertThat(resourceHandler).isNotNull();
 		return resourceHandler.getResourceTransformers();
 	}
 
@@ -1046,8 +1156,10 @@ class WebMvcAutoConfigurationTests {
 		Map<String, List<Resource>> mappingLocations = new LinkedHashMap<>();
 		getHandlerMap(mapping).forEach((key, value) -> {
 			List<String> locationValues = (List<String>) ReflectionTestUtils.getField(value, "locationValues");
+			assertThat(locationValues).isNotNull();
 			List<Resource> locationResources = (List<Resource>) ReflectionTestUtils.getField(value,
 					"locationResources");
+			assertThat(locationResources).isNotNull();
 			List<Resource> resources = new ArrayList<>();
 			for (String locationValue : locationValues) {
 				resources.add(context.getResource(locationValue));
@@ -1141,7 +1253,7 @@ class WebMvcAutoConfigurationTests {
 	static class MyViewResolver implements ViewResolver {
 
 		@Override
-		public View resolveViewName(String viewName, Locale locale) {
+		public @Nullable View resolveViewName(String viewName, Locale locale) {
 			return null;
 		}
 
@@ -1445,7 +1557,8 @@ class WebMvcAutoConfigurationTests {
 		}
 
 		@Override
-		public void setLocale(HttpServletRequest request, HttpServletResponse response, Locale locale) {
+		public void setLocale(HttpServletRequest request, @Nullable HttpServletResponse response,
+				@Nullable Locale locale) {
 		}
 
 	}
@@ -1453,7 +1566,7 @@ class WebMvcAutoConfigurationTests {
 	static class CustomFlashMapManager extends AbstractFlashMapManager {
 
 		@Override
-		protected List<FlashMap> retrieveFlashMaps(HttpServletRequest request) {
+		protected @Nullable List<FlashMap> retrieveFlashMaps(HttpServletRequest request) {
 			return null;
 		}
 
@@ -1468,7 +1581,7 @@ class WebMvcAutoConfigurationTests {
 	static class CustomViewNameTranslator implements RequestToViewNameTranslator {
 
 		@Override
-		public String getViewName(HttpServletRequest requestAttributes) {
+		public @Nullable String getViewName(HttpServletRequest requestAttributes) {
 			return null;
 		}
 
@@ -1564,6 +1677,26 @@ class WebMvcAutoConfigurationTests {
 		@AfterReturning(pointcut = "@annotation(org.springframework.web.bind.annotation.ExceptionHandler)",
 				returning = "returnValue")
 		void exceptionHandlerIntercept(JoinPoint joinPoint, Object returnValue) {
+		}
+
+	}
+
+	@Configuration(proxyBeanMethods = false)
+	static class ApiVersionConfiguration {
+
+		@Bean
+		ApiVersionResolver apiVersionResolver() {
+			return (request) -> "latest";
+		}
+
+		@Bean
+		ApiVersionDeprecationHandler apiVersionDeprecationHandler(ApiVersionParser<?> apiVersionParser) {
+			return new StandardApiVersionDeprecationHandler(apiVersionParser);
+		}
+
+		@Bean
+		ApiVersionParser<String> apiVersionParser() {
+			return (version) -> String.valueOf(version);
 		}
 
 	}

@@ -27,6 +27,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Conditional;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.converter.json.GsonHttpMessageConverter;
+import org.springframework.http.converter.json.JacksonJsonHttpMessageConverter;
 import org.springframework.http.converter.json.JsonbHttpMessageConverter;
 
 /**
@@ -66,7 +67,8 @@ class JsonbHttpMessageConvertersConfiguration {
 		}
 
 		@SuppressWarnings("removal")
-		@ConditionalOnMissingBean({ org.springframework.http.converter.json.MappingJackson2HttpMessageConverter.class,
+		@ConditionalOnMissingBean({ JacksonJsonHttpMessageConverter.class,
+				org.springframework.http.converter.json.MappingJackson2HttpMessageConverter.class,
 				GsonHttpMessageConverter.class })
 		static class JacksonAndGsonMissing {
 

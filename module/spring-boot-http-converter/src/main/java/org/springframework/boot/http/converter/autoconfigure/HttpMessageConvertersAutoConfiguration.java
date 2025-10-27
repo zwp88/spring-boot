@@ -30,6 +30,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Conditional;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.converter.HttpMessageConverter;
 import org.springframework.http.converter.StringHttpMessageConverter;
 
@@ -45,23 +47,43 @@ import org.springframework.http.converter.StringHttpMessageConverter;
  * @author Sebastien Deleuze
  * @author Stephane Nicoll
  * @author Eddú Meléndez
+ * @author Dmitry Sulman
+ * @author Brian Clozel
  * @since 4.0.0
  */
+@SuppressWarnings("removal")
 @AutoConfiguration(afterName = { "org.springframework.boot.jackson.autoconfigure.JacksonAutoConfiguration",
+		"org.springframework.boot.jackson2.autoconfigure.Jackson2AutoConfiguration",
 		"org.springframework.boot.jsonb.autoconfigure.JsonbAutoConfiguration",
-		"org.springframework.boot.gson.autoconfigure.GsonAutoConfiguration" })
+		"org.springframework.boot.gson.autoconfigure.GsonAutoConfiguration",
+		"org.springframework.boot.kotlin.serialization.autoconfigure.KotlinSerializationAutoConfiguration" })
 @ConditionalOnClass(HttpMessageConverter.class)
 @Conditional(NotReactiveWebApplicationCondition.class)
-@Import({ JacksonHttpMessageConvertersConfiguration.class, GsonHttpMessageConvertersConfiguration.class,
-		JsonbHttpMessageConvertersConfiguration.class })
-public class HttpMessageConvertersAutoConfiguration {
+@Import({ JacksonHttpMessageConvertersConfiguration.class, Jackson2HttpMessageConvertersConfiguration.class,
+		GsonHttpMessageConvertersConfiguration.class, JsonbHttpMessageConvertersConfiguration.class,
+		KotlinSerializationHttpMessageConvertersConfiguration.class })
+public final class HttpMessageConvertersAutoConfiguration {
 
 	static final String PREFERRED_MAPPER_PROPERTY = "spring.http.converters.preferred-json-mapper";
 
 	@Bean
-	@ConditionalOnMissingBean
-	public HttpMessageConverters messageConverters(ObjectProvider<HttpMessageConverter<?>> converters) {
-		return new HttpMessageConverters(converters.orderedStream().toList());
+	@Order(Ordered.LOWEST_PRECEDENCE)
+	@SuppressWarnings("deprecation")
+	ClientHttpMessageConvertersCustomizer clientConvertersCustomizer(
+			ObjectProvider<HttpMessageConverters> legacyConverters,
+			ObjectProvider<HttpMessageConverter<?>> converters) {
+		return new DefaultClientHttpMessageConvertersCustomizer(legacyConverters.getIfAvailable(),
+				converters.orderedStream().toList());
+	}
+
+	@Bean
+	@Order(Ordered.LOWEST_PRECEDENCE)
+	@SuppressWarnings("deprecation")
+	ServerHttpMessageConvertersCustomizer serverConvertersCustomizer(
+			ObjectProvider<HttpMessageConverters> legacyConverters,
+			ObjectProvider<HttpMessageConverter<?>> converters) {
+		return new DefaultServerHttpMessageConvertersCustomizer(legacyConverters.getIfAvailable(),
+				converters.orderedStream().toList());
 	}
 
 	@Configuration(proxyBeanMethods = false)
@@ -71,7 +93,7 @@ public class HttpMessageConvertersAutoConfiguration {
 
 		@Bean
 		@ConditionalOnMissingBean
-		public StringHttpMessageConverter stringHttpMessageConverter(HttpMessageConvertersProperties properties) {
+		StringHttpMessageConverter stringHttpMessageConverter(HttpMessageConvertersProperties properties) {
 			StringHttpMessageConverter converter = new StringHttpMessageConverter(
 					properties.getStringEncodingCharset());
 			converter.setWriteAcceptCharset(false);

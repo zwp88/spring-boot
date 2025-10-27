@@ -29,7 +29,12 @@ dependencies {
 
 	runtimeOnly(project(":starter:spring-boot-starter-jetty"))
 
+	testImplementation(project(":module:spring-boot-webmvc-test"))
 	testImplementation(project(":starter:spring-boot-starter-test"))
 
 	testRuntimeOnly("com.jayway.jsonpath:json-path")
+}
+
+tasks.named("compileTestJava") {
+	options.nullability.checking = "tests"
 }

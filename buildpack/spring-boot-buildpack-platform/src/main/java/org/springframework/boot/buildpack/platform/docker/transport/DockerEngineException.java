@@ -18,6 +18,8 @@ package org.springframework.boot.buildpack.platform.docker.transport;
 
 import java.net.URI;
 
+import org.jspecify.annotations.Nullable;
+
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 
@@ -32,14 +34,14 @@ public class DockerEngineException extends RuntimeException {
 
 	private final int statusCode;
 
-	private final String reasonPhrase;
+	private final @Nullable String reasonPhrase;
 
-	private final Errors errors;
+	private final @Nullable Errors errors;
 
-	private final Message responseMessage;
+	private final @Nullable Message responseMessage;
 
-	public DockerEngineException(String host, URI uri, int statusCode, String reasonPhrase, Errors errors,
-			Message responseMessage) {
+	public DockerEngineException(String host, URI uri, int statusCode, @Nullable String reasonPhrase,
+			@Nullable Errors errors, @Nullable Message responseMessage) {
 		super(buildMessage(host, uri, statusCode, reasonPhrase, errors, responseMessage));
 		this.statusCode = statusCode;
 		this.reasonPhrase = reasonPhrase;
@@ -59,7 +61,7 @@ public class DockerEngineException extends RuntimeException {
 	 * Return the reason phrase returned by the Docker API.
 	 * @return the reasonPhrase
 	 */
-	public String getReasonPhrase() {
+	public @Nullable String getReasonPhrase() {
 		return this.reasonPhrase;
 	}
 
@@ -68,7 +70,7 @@ public class DockerEngineException extends RuntimeException {
 	 * errors JSON could not be read.
 	 * @return the errors or {@code null}
 	 */
-	public Errors getErrors() {
+	public @Nullable Errors getErrors() {
 		return this.errors;
 	}
 
@@ -77,12 +79,12 @@ public class DockerEngineException extends RuntimeException {
 	 * message JSON could not be read.
 	 * @return the message or {@code null}
 	 */
-	public Message getResponseMessage() {
+	public @Nullable Message getResponseMessage() {
 		return this.responseMessage;
 	}
 
-	private static String buildMessage(String host, URI uri, int statusCode, String reasonPhrase, Errors errors,
-			Message responseMessage) {
+	private static String buildMessage(String host, URI uri, int statusCode, @Nullable String reasonPhrase,
+			@Nullable Errors errors, @Nullable Message responseMessage) {
 		Assert.notNull(host, "'host' must not be null");
 		Assert.notNull(uri, "'uri' must not be null");
 		StringBuilder message = new StringBuilder(

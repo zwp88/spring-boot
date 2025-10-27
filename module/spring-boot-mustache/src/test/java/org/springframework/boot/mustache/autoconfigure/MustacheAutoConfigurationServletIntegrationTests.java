@@ -30,11 +30,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.mustache.servlet.view.MustacheView;
 import org.springframework.boot.mustache.servlet.view.MustacheViewResolver;
+import org.springframework.boot.resttestclient.TestRestTemplate;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.tomcat.autoconfigure.servlet.TomcatServletWebServerAutoConfiguration;
+import org.springframework.boot.web.server.WebServer;
 import org.springframework.boot.web.server.servlet.context.ServletWebServerApplicationContext;
-import org.springframework.boot.web.server.test.client.TestRestTemplate;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
@@ -63,7 +64,9 @@ class MustacheAutoConfigurationServletIntegrationTests {
 
 	@BeforeEach
 	void init() {
-		this.port = this.context.getWebServer().getPort();
+		WebServer webServer = this.context.getWebServer();
+		assertThat(webServer).isNotNull();
+		this.port = webServer.getPort();
 	}
 
 	@Test

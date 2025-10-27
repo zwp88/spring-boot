@@ -28,6 +28,7 @@ import java.util.jar.JarFile;
 import java.util.jar.Manifest;
 
 import org.gradle.testkit.runner.BuildResult;
+import org.gradle.testkit.runner.BuildTask;
 import org.gradle.testkit.runner.TaskOutcome;
 import org.junit.jupiter.api.TestTemplate;
 
@@ -43,9 +44,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @author Andy Wilkinson
  * @author Scott Frederick
  */
-@GradleCompatibility
+@GradleCompatibility(minimumVersion = "8.3")
 class NativeImagePluginActionIntegrationTests {
 
+	@SuppressWarnings("NullAway.Init")
 	GradleBuild gradleBuild;
 
 	@TestTemplate
@@ -58,7 +60,9 @@ class NativeImagePluginActionIntegrationTests {
 	void reachabilityMetadataConfigurationFilesAreCopiedToJar() throws IOException {
 		writeDummySpringApplicationAotProcessorMainClass();
 		BuildResult result = this.gradleBuild.build("bootJar");
-		assertThat(result.task(":bootJar").getOutcome()).isEqualTo(TaskOutcome.SUCCESS);
+		BuildTask task = result.task(":bootJar");
+		assertThat(task).isNotNull();
+		assertThat(task.getOutcome()).isEqualTo(TaskOutcome.SUCCESS);
 		File buildLibs = new File(this.gradleBuild.getProjectDir(), "build/libs");
 		File jarFile = new File(buildLibs, this.gradleBuild.getProjectDir().getName() + ".jar");
 		assertThat(buildLibs.listFiles()).contains(jarFile);
@@ -76,7 +80,9 @@ class NativeImagePluginActionIntegrationTests {
 		FileSystemUtils.copyRecursively(new File("src/test/resources/reachability-metadata-repository"),
 				new File(this.gradleBuild.getProjectDir(), "reachability-metadata-repository"));
 		BuildResult result = this.gradleBuild.build("bootJar");
-		assertThat(result.task(":bootJar").getOutcome()).isEqualTo(TaskOutcome.SUCCESS);
+		BuildTask task = result.task(":bootJar");
+		assertThat(task).isNotNull();
+		assertThat(task.getOutcome()).isEqualTo(TaskOutcome.SUCCESS);
 		File buildLibs = new File(this.gradleBuild.getProjectDir(), "build/libs");
 		File jarFile = new File(buildLibs, this.gradleBuild.getProjectDir().getName() + ".jar");
 		assertThat(buildLibs.listFiles()).contains(jarFile);
@@ -111,7 +117,9 @@ class NativeImagePluginActionIntegrationTests {
 
 	@TestTemplate
 	void classesGeneratedDuringAotTestProcessingAreOnTheTestNativeImageClasspath() {
-		BuildResult result = this.gradleBuild.build("checkTestNativeImageClasspath");
+		BuildResult result = this.gradleBuild
+			.scriptProperty("junitVersion", TestTemplate.class.getPackage().getImplementationVersion())
+			.build("checkTestNativeImageClasspath");
 		assertThat(result.getOutput()).contains(projectPath("build/classes/java/aotTest"),
 				projectPath("build/resources/aotTest"), projectPath("build/generated/aotTestClasses"));
 	}
@@ -120,7 +128,9 @@ class NativeImagePluginActionIntegrationTests {
 	void nativeEntryIsAddedToManifest() throws IOException {
 		writeDummySpringApplicationAotProcessorMainClass();
 		BuildResult result = this.gradleBuild.build("bootJar");
-		assertThat(result.task(":bootJar").getOutcome()).isEqualTo(TaskOutcome.SUCCESS);
+		BuildTask task = result.task(":bootJar");
+		assertThat(task).isNotNull();
+		assertThat(task.getOutcome()).isEqualTo(TaskOutcome.SUCCESS);
 		File buildLibs = new File(this.gradleBuild.getProjectDir(), "build/libs");
 		try (JarFile jarFile = new JarFile(new File(buildLibs, this.gradleBuild.getProjectDir().getName() + ".jar"))) {
 			Manifest manifest = jarFile.getManifest();

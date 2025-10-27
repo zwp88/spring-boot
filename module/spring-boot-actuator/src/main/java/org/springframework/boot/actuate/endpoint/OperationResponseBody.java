@@ -18,12 +18,15 @@ package org.springframework.boot.actuate.endpoint;
 
 import java.util.Map;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import org.jspecify.annotations.Nullable;
+import tools.jackson.databind.json.JsonMapper;
+
+import org.springframework.lang.Contract;
 
 /**
  * Tagging interface used to indicate that an operation result is intended to be returned
  * in the body of the response. Primarily intended to support JSON serialization using an
- * endpoint specific {@link ObjectMapper}.
+ * endpoint specific {@link JsonMapper}.
  *
  * @author Phillip Webb
  * @since 3.0.0
@@ -38,7 +41,8 @@ public interface OperationResponseBody {
 	 * @param map the source map or {@code null}
 	 * @return a {@link OperationResponseBody} version of the map or {@code null}
 	 */
-	static <K, V> Map<K, V> of(Map<K, V> map) {
+	@Contract("!null -> !null")
+	static <K, V> @Nullable Map<K, V> of(@Nullable Map<K, V> map) {
 		return (map != null) ? new OperationResponseBodyMap<>(map) : null;
 	}
 

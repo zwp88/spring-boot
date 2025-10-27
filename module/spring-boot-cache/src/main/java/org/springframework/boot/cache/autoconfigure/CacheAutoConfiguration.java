@@ -51,8 +51,8 @@ import org.springframework.util.Assert;
  * @since 4.0.0
  * @see EnableCaching
  */
-@AutoConfiguration(afterName = { "org.springframework.boot.data.couchbase.autoconfigure.CouchbaseDataAutoConfiguration",
-		"org.springframework.boot.data.redis.autoconfigure.RedisAutoConfiguration",
+@AutoConfiguration(afterName = { "org.springframework.boot.data.couchbase.autoconfigure.DataCouchbaseAutoConfiguration",
+		"org.springframework.boot.data.redis.autoconfigure.DataRedisAutoConfiguration",
 		"org.springframework.boot.hazelcast.autoconfigure.HazelcastAutoConfiguration",
 		"org.springframework.boot.hibernate.autoconfigure.HibernateJpaAutoConfiguration" })
 @ConditionalOnClass(CacheManager.class)
@@ -60,16 +60,16 @@ import org.springframework.util.Assert;
 @ConditionalOnMissingBean(value = CacheManager.class, name = "cacheResolver")
 @EnableConfigurationProperties(CacheProperties.class)
 @Import({ CacheConfigurationImportSelector.class, CacheManagerEntityManagerFactoryDependsOnConfiguration.class })
-public class CacheAutoConfiguration {
+public final class CacheAutoConfiguration {
 
 	@Bean
 	@ConditionalOnMissingBean
-	public CacheManagerCustomizers cacheManagerCustomizers(ObjectProvider<CacheManagerCustomizer<?>> customizers) {
+	CacheManagerCustomizers cacheManagerCustomizers(ObjectProvider<CacheManagerCustomizer<?>> customizers) {
 		return new CacheManagerCustomizers(customizers.orderedStream().toList());
 	}
 
 	@Bean
-	public CacheManagerValidator cacheAutoConfigurationValidator(CacheProperties cacheProperties,
+	CacheManagerValidator cacheAutoConfigurationValidator(CacheProperties cacheProperties,
 			ObjectProvider<CacheManager> cacheManager) {
 		return new CacheManagerValidator(cacheProperties, cacheManager);
 	}

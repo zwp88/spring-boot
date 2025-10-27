@@ -69,7 +69,7 @@ class StandardStackTracePrinterTests {
 					at org.springframework.boot.logging.TestException.createException(TestException.java:NN)
 					at org.springframework.boot.logging.TestException.createTestException(TestException.java:NN)
 					at org.springframework.boot.logging.TestException$CreatorThread.run(TestException.java:NN)
-					Suppressed: java.lang.RuntimeException: supressed
+					Suppressed: java.lang.RuntimeException: suppressed
 						at org.springframework.boot.logging.TestException.createTestException(TestException.java:NN)
 						... 1 more
 						""");
@@ -85,7 +85,7 @@ class StandardStackTracePrinterTests {
 					at org.springframework.boot.logging.TestException.createException(TestException.java:NN)
 					at org.springframework.boot.logging.TestException.createTestException(TestException.java:NN)
 					at org.springframework.boot.logging.TestException$CreatorThread.run(TestException.java:NN)
-					Suppressed: java.lang.RuntimeException: supressed
+					Suppressed: java.lang.RuntimeException: suppressed
 						at org.springframework.boot.logging.TestException.createTestException(TestException.java:NN)
 						at org.springframework.boot.logging.TestException$CreatorThread.run(TestException.java:NN)
 				Caused by: java.lang.RuntimeException: cause
@@ -115,7 +115,7 @@ class StandardStackTracePrinterTests {
 					at org.springframework.boot.logging.TestException.createException(TestException.java:NN)
 					at org.springframework.boot.logging.TestException.createTestException(TestException.java:NN)
 					at org.springframework.boot.logging.TestException$CreatorThread.run(TestException.java:NN)
-					Suppressed: java.lang.RuntimeException: supressed
+					Suppressed: java.lang.RuntimeException: suppressed
 						at org.springframework.boot.logging.TestException.createTestException(TestException.java:NN)
 						at org.springframework.boot.logging.TestException$CreatorThread.run(TestException.java:NN)
 						""");
@@ -177,7 +177,7 @@ class StandardStackTracePrinterTests {
 				Wrapped by: java.lang.RuntimeException: exception
 					at org.springframework.boot.logging.TestException.actualCreateException(TestException.java:NN)
 					... 3 filtered
-					Suppressed: java.lang.RuntimeException: supressed
+					Suppressed: java.lang.RuntimeException: suppressed
 						at org.springframework.boot.logging.TestException.createTestException(TestException.java:NN)
 						... 1 more
 						""");
@@ -201,13 +201,14 @@ class StandardStackTracePrinterTests {
 					at org.springframework.boot.logging.TestException.actualCreateException(TestException.java:NN)
 					at org.springframework.boot.logging.TestException.createException(TestException.java:NN)
 					... 2 filtered
-					Suppressed: java.lang.RuntimeException: supressed
+					Suppressed: java.lang.RuntimeException: suppressed
 						at org.springframework.boot.logging.TestException.createTestException(TestException.java:NN)
 						at org.springframework.boot.logging.TestException$CreatorThread.run(TestException.java:NN)
 						""");
 	}
 
 	@Test
+	@SuppressWarnings("NullAway") // Test null check
 	void withFilterWhenPredicateIsNullThrowsException() {
 		assertThatIllegalArgumentException().isThrownBy(() -> StandardStackTracePrinter.rootFirst().withFilter(null))
 			.withMessage("'predicate' must not be null");
@@ -253,7 +254,7 @@ class StandardStackTracePrinterTests {
 				Wrapped by: java.lang.RuntimeException: exception
 					... 3 filtered
 					at org.springframework.boot.logging.TestException$CreatorThread.run(TestException.java:NN)
-					Suppressed: java.lang.RuntimeException: supressed
+					Suppressed: java.lang.RuntimeException: suppressed
 						... 1 filtered
 						at org.springframework.boot.logging.TestException$CreatorThread.run(TestException.java:NN)
 						""");
@@ -267,6 +268,7 @@ class StandardStackTracePrinterTests {
 	}
 
 	@Test
+	@SuppressWarnings("NullAway") // Test null check
 	void withFormatterWhenFormatterIsNullThrowsException() {
 		assertThatIllegalArgumentException().isThrownBy(() -> StandardStackTracePrinter.rootLast().withFormatter(null))
 			.withMessage("'formatter' must not be null");
@@ -284,7 +286,7 @@ class StandardStackTracePrinterTests {
 					at org.springframework.boot.logging.TestException.createException(TestException.java:NN)
 					at org.springframework.boot.logging.TestException.createTestException(TestException.java:NN)
 					at org.springframework.boot.logging.TestException$CreatorThread.run(TestException.java:NN)
-					Suppressed: RuntimeException: supressed
+					Suppressed: RuntimeException: suppressed
 						at org.springframework.boot.logging.TestException.createTestException(TestException.java:NN)
 						... 1 more
 				Caused by: RuntimeException: cause
@@ -298,6 +300,7 @@ class StandardStackTracePrinterTests {
 	}
 
 	@Test
+	@SuppressWarnings("NullAway") // Test null check
 	void withFrameFormatterWhenFormatterIsNullThrowsException() {
 		assertThatIllegalArgumentException()
 			.isThrownBy(() -> StandardStackTracePrinter.rootLast().withFrameFormatter(null))
@@ -316,7 +319,7 @@ class StandardStackTracePrinterTests {
 					at TestException.createException
 					at TestException.createTestException
 					at TestException.CreatorThread.run
-					Suppressed: java.lang.RuntimeException: supressed
+					Suppressed: java.lang.RuntimeException: suppressed
 						at TestException.createTestException
 						... 1 more
 				Caused by: java.lang.RuntimeException: cause
@@ -336,21 +339,21 @@ class StandardStackTracePrinterTests {
 			.withHashes((frame) -> Objects.hash(frame.getClassName(), frame.getMethodName()));
 		assertThat(printer.printStackTraceToString(exception)).isEqualToNormalizingNewlines("""
 				<#cc3eebec> java.lang.RuntimeException: exception
-					at org.springframework.boot.logging.TestException.actualCreateException(TestException.java:63)
-					at org.springframework.boot.logging.TestException.createException(TestException.java:59)
-					at org.springframework.boot.logging.TestException.createTestException(TestException.java:49)
-					at org.springframework.boot.logging.TestException$CreatorThread.run(TestException.java:77)
-					Suppressed: <#834defc3> java.lang.RuntimeException: supressed
-						at org.springframework.boot.logging.TestException.createTestException(TestException.java:50)
+					at org.springframework.boot.logging.TestException.actualCreateException(TestException.java:69)
+					at org.springframework.boot.logging.TestException.createException(TestException.java:65)
+					at org.springframework.boot.logging.TestException.createTestException(TestException.java:55)
+					at org.springframework.boot.logging.TestException$CreatorThread.run(TestException.java:83)
+					Suppressed: <#834defc3> java.lang.RuntimeException: suppressed
+						at org.springframework.boot.logging.TestException.createTestException(TestException.java:56)
 						... 1 more
 				Caused by: <#611639c5> java.lang.RuntimeException: cause
-					at org.springframework.boot.logging.TestException.createCause(TestException.java:55)
-					at org.springframework.boot.logging.TestException.createTestException(TestException.java:48)
+					at org.springframework.boot.logging.TestException.createCause(TestException.java:61)
+					at org.springframework.boot.logging.TestException.createTestException(TestException.java:54)
 					... 1 more
 				Caused by: <#834defc3> java.lang.RuntimeException: root
-					at org.springframework.boot.logging.TestException.createTestException(TestException.java:47)
+					at org.springframework.boot.logging.TestException.createTestException(TestException.java:53)
 					... 1 more
-					""");
+				""");
 	}
 
 	@Test
@@ -367,7 +370,7 @@ class StandardStackTracePrinterTests {
 					at org.springframework.boot.logging.TestException.createException(TestException.java:NN)
 					at org.springframework.boot.logging.TestException.createTestException(TestException.java:NN)
 					at org.springframework.boot.logging.TestException$CreatorThread.run(TestException.java:NN)
-					Suppressed: java.lang.RuntimeException: supressed
+					Suppressed: java.lang.RuntimeException: suppressed
 						at org.springframework.boot.logging.TestException.createTestException(TestException.java:NN)
 						... 1 more
 				Caused by: java.lang.RuntimeException: cause

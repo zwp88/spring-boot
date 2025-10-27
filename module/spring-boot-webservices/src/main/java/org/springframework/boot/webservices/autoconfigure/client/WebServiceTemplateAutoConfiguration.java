@@ -24,7 +24,7 @@ import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.http.client.ClientHttpRequestFactoryBuilder;
-import org.springframework.boot.http.client.ClientHttpRequestFactorySettings;
+import org.springframework.boot.http.client.HttpClientSettings;
 import org.springframework.boot.webservices.client.WebServiceMessageSenderFactory;
 import org.springframework.boot.webservices.client.WebServiceTemplateBuilder;
 import org.springframework.boot.webservices.client.WebServiceTemplateCustomizer;
@@ -41,21 +41,21 @@ import org.springframework.ws.client.core.WebServiceTemplate;
  */
 @AutoConfiguration
 @ConditionalOnClass({ WebServiceTemplate.class, Unmarshaller.class, Marshaller.class })
-public class WebServiceTemplateAutoConfiguration {
+public final class WebServiceTemplateAutoConfiguration {
 
 	@Bean
 	@ConditionalOnMissingBean
-	public WebServiceMessageSenderFactory webServiceHttpMessageSenderFactory(
+	WebServiceMessageSenderFactory webServiceHttpMessageSenderFactory(
 			ObjectProvider<ClientHttpRequestFactoryBuilder<?>> clientHttpRequestFactoryBuilder,
-			ObjectProvider<ClientHttpRequestFactorySettings> clientHttpRequestFactorySettings) {
+			ObjectProvider<HttpClientSettings> httpClientSettings) {
 		return WebServiceMessageSenderFactory.http(
 				clientHttpRequestFactoryBuilder.getIfAvailable(ClientHttpRequestFactoryBuilder::detect),
-				clientHttpRequestFactorySettings.getIfAvailable());
+				httpClientSettings.getIfAvailable());
 	}
 
 	@Bean
 	@ConditionalOnMissingBean
-	public WebServiceTemplateBuilder webServiceTemplateBuilder(
+	WebServiceTemplateBuilder webServiceTemplateBuilder(
 			ObjectProvider<WebServiceMessageSenderFactory> httpWebServiceMessageSenderBuilder,
 			ObjectProvider<WebServiceTemplateCustomizer> webServiceTemplateCustomizers) {
 		WebServiceTemplateBuilder templateBuilder = new WebServiceTemplateBuilder();

@@ -26,6 +26,14 @@ plugins {
 
 description = "Spring Boot CLI"
 
+sourceSets {
+	main {
+		java {
+			srcDir file("src/json-shade/java")
+		}
+	}
+}
+
 configurations {
 	loader
 	testRepository
@@ -37,7 +45,6 @@ dependencies {
 	compileOnlyProject(project(":core:spring-boot"))
 
 	implementation(project(":loader:spring-boot-loader-tools"))
-	implementation("com.vaadin.external.google:android-json")
 	implementation("jline:jline")
 	implementation("net.sf.jopt-simple:jopt-simple")
 	implementation("org.apache.httpcomponents.client5:httpclient5")
@@ -52,6 +59,13 @@ dependencies {
 	testImplementation(project(":core:spring-boot"))
 	testImplementation(project(":core:spring-boot-test"))
 	testImplementation(project(":test-support:spring-boot-test-support"))
+}
+
+architectureCheck {
+	nullMarked {
+		enabled  = false
+		ignoredPackages = ['org.springframework.boot.cli.json']
+	}
 }
 
 tasks.register("fullJar", Jar) {
@@ -147,4 +161,12 @@ publishing {
 
 eclipse.classpath { // https://github.com/eclipse/buildship/issues/939
 	plusConfigurations += [ configurations.compileOnlyProject ]
+}
+
+tasks.named("compileTestJava") {
+	options.nullability.checking = "tests"
+}
+
+tasks.named("compileIntTestJava") {
+	options.nullability.checking = "tests"
 }

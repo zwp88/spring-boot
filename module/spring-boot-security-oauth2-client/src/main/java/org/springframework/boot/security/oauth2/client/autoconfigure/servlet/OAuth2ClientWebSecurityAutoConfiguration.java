@@ -22,9 +22,9 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication.Type;
-import org.springframework.boot.security.autoconfigure.ConditionalOnDefaultWebSecurity;
-import org.springframework.boot.security.autoconfigure.actuate.servlet.ManagementWebSecurityAutoConfiguration;
-import org.springframework.boot.security.autoconfigure.servlet.SecurityAutoConfiguration;
+import org.springframework.boot.security.autoconfigure.SecurityAutoConfiguration;
+import org.springframework.boot.security.autoconfigure.actuate.web.servlet.ManagementWebSecurityAutoConfiguration;
+import org.springframework.boot.security.autoconfigure.web.servlet.ConditionalOnDefaultWebSecurity;
 import org.springframework.boot.security.oauth2.client.autoconfigure.OAuth2ClientAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -50,7 +50,7 @@ import static org.springframework.security.config.Customizer.withDefaults;
 @ConditionalOnClass({ EnableWebSecurity.class, OAuth2AuthorizedClientRepository.class })
 @ConditionalOnBean(OAuth2AuthorizedClientService.class)
 @ConditionalOnWebApplication(type = Type.SERVLET)
-public class OAuth2ClientWebSecurityAutoConfiguration {
+public final class OAuth2ClientWebSecurityAutoConfiguration {
 
 	@Bean
 	@ConditionalOnMissingBean
@@ -63,7 +63,7 @@ public class OAuth2ClientWebSecurityAutoConfiguration {
 	static class OAuth2SecurityFilterChainConfiguration {
 
 		@Bean
-		SecurityFilterChain oauth2SecurityFilterChain(HttpSecurity http) throws Exception {
+		SecurityFilterChain oauth2SecurityFilterChain(HttpSecurity http) {
 			http.authorizeHttpRequests((requests) -> requests.anyRequest().authenticated());
 			http.oauth2Login(withDefaults());
 			http.oauth2Client(withDefaults());

@@ -36,6 +36,7 @@ import java.util.zip.ZipEntry;
 import org.assertj.core.api.AbstractAssert;
 import org.assertj.core.api.AssertProvider;
 import org.assertj.core.api.ListAssert;
+import org.jspecify.annotations.Nullable;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.contentOf;
@@ -50,11 +51,6 @@ abstract class AbstractArchiveIntegrationTests {
 
 	protected String buildLog(File project) {
 		return contentOf(new File(project, "target/build.log"));
-	}
-
-	protected String launchScript(File jar) {
-		String content = contentOf(jar);
-		return content.substring(0, content.indexOf(new String(new byte[] { 0x50, 0x4b, 0x03, 0x04 })));
 	}
 
 	protected AssertProvider<JarAssert> jar(File file) {
@@ -95,7 +91,7 @@ abstract class AbstractArchiveIntegrationTests {
 		}
 	}
 
-	protected String getLayersIndexLocation() {
+	protected @Nullable String getLayersIndexLocation() {
 		return null;
 	}
 
@@ -159,7 +155,7 @@ abstract class AbstractArchiveIntegrationTests {
 					Optional<JarEntry> match = entries.filter((entry) -> entry.getName().startsWith(prefix))
 						.findFirst();
 					assertThat(match).as("Name starting with %s", prefix)
-						.hasValueSatisfying((entry) -> assertThat(entry.getComment()).startsWith("UNPACK:"));
+						.hasValueSatisfying((entry) -> assertThat(entry.getComment()).isEqualTo("UNPACK"));
 				});
 			});
 			return this;

@@ -48,6 +48,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 import org.springframework.core.log.LogMessage;
 import org.springframework.http.server.ServerHttpRequest;
+import org.springframework.util.Assert;
 
 /**
  * {@link EnableAutoConfiguration Auto-configuration} for remote development support.
@@ -58,31 +59,34 @@ import org.springframework.http.server.ServerHttpRequest;
  * @author Madhura Bhave
  * @since 1.3.0
  */
-@AutoConfiguration(afterName = "org.springframework.boot.security.autoconfigure.servlet.SecurityAutoConfiguration")
+@AutoConfiguration(
+		afterName = "org.springframework.boot.security.autoconfigure.web.servlet.ServletWebSecurityAutoConfiguration")
 @ConditionalOnEnabledDevTools
 @ConditionalOnProperty("spring.devtools.remote.secret")
 @ConditionalOnClass({ Filter.class, ServerHttpRequest.class, ServerProperties.class })
 @Import(RemoteDevtoolsSecurityConfiguration.class)
 @EnableConfigurationProperties({ ServerProperties.class, DevToolsProperties.class })
-public class RemoteDevToolsAutoConfiguration {
+public final class RemoteDevToolsAutoConfiguration {
 
 	private static final Log logger = LogFactory.getLog(RemoteDevToolsAutoConfiguration.class);
 
 	private final DevToolsProperties properties;
 
-	public RemoteDevToolsAutoConfiguration(DevToolsProperties properties) {
+	RemoteDevToolsAutoConfiguration(DevToolsProperties properties) {
 		this.properties = properties;
 	}
 
 	@Bean
 	@ConditionalOnMissingBean
-	public AccessManager remoteDevToolsAccessManager() {
+	AccessManager remoteDevToolsAccessManager() {
 		RemoteDevToolsProperties remoteProperties = this.properties.getRemote();
-		return new HttpHeaderAccessManager(remoteProperties.getSecretHeaderName(), remoteProperties.getSecret());
+		String secret = remoteProperties.getSecret();
+		Assert.state(secret != null, "'secret' must not be null");
+		return new HttpHeaderAccessManager(remoteProperties.getSecretHeaderName(), secret);
 	}
 
 	@Bean
-	public HandlerMapper remoteDevToolsHealthCheckHandlerMapper(ServerProperties serverProperties) {
+	HandlerMapper remoteDevToolsHealthCheckHandlerMapper(ServerProperties serverProperties) {
 		Handler handler = new HttpStatusHandler();
 		Servlet servlet = serverProperties.getServlet();
 		String servletContextPath = (servlet.getContextPath() != null) ? servlet.getContextPath() : "";
@@ -91,8 +95,7 @@ public class RemoteDevToolsAutoConfiguration {
 
 	@Bean
 	@ConditionalOnMissingBean
-	public DispatcherFilter remoteDevToolsDispatcherFilter(AccessManager accessManager,
-			Collection<HandlerMapper> mappers) {
+	DispatcherFilter remoteDevToolsDispatcherFilter(AccessManager accessManager, Collection<HandlerMapper> mappers) {
 		Dispatcher dispatcher = new Dispatcher(accessManager, mappers);
 		return new DispatcherFilter(dispatcher);
 	}

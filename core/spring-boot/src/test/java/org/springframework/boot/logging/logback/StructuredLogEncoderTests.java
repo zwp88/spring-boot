@@ -82,7 +82,23 @@ class StructuredLogEncoderTests extends AbstractStructuredLoggingTests {
 		Map<String, Object> deserialized = deserialize(json);
 		assertThat(deserialized).containsEntry("ecs", Map.of("version", "8.11"));
 		Map<String, Object> error = (Map<String, Object>) deserialized.get("error");
+		assertThat(error).isNotNull();
 		assertThat(error.get("stack_trace")).isEqualTo("stacktrace:RuntimeException");
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	void shouldOutputNestedAdditionalEcsJson() {
+		this.environment.setProperty("logging.structured.json.add.extra.value", "test");
+		this.encoder.setFormat("ecs");
+		this.encoder.start();
+		LoggingEvent event = createEvent();
+		event.setMDCPropertyMap(Collections.emptyMap());
+		String json = encode(event);
+		Map<String, Object> deserialized = deserialize(json);
+		assertThat(deserialized).containsKey("extra");
+		assertThat((Map<String, Object>) deserialized.get("extra")).containsEntry("value", "test");
+		System.out.println(deserialized);
 	}
 
 	@Test

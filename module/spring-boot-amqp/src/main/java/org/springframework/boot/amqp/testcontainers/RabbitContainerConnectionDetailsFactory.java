@@ -19,7 +19,8 @@ package org.springframework.boot.amqp.testcontainers;
 import java.net.URI;
 import java.util.List;
 
-import org.testcontainers.containers.RabbitMQContainer;
+import org.jspecify.annotations.Nullable;
+import org.testcontainers.rabbitmq.RabbitMQContainer;
 
 import org.springframework.boot.amqp.autoconfigure.RabbitConnectionDetails;
 import org.springframework.boot.ssl.SslBundle;
@@ -72,7 +73,7 @@ class RabbitContainerConnectionDetailsFactory
 		}
 
 		@Override
-		public SslBundle getSslBundle() {
+		public @Nullable SslBundle getSslBundle() {
 			return super.getSslBundle();
 		}
 

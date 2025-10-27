@@ -19,6 +19,8 @@ package org.springframework.boot.cloud;
 import java.util.Arrays;
 import java.util.List;
 
+import org.jspecify.annotations.Nullable;
+
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.core.env.EnumerablePropertySource;
@@ -162,6 +164,20 @@ public enum CloudPlatform {
 			return this.azureEnvVariables.stream().allMatch(environment::containsProperty);
 		}
 
+	},
+
+	/**
+	 * Amazon Web Services (AWS) Elastic Container Service (ECS) platform.
+	 * @since 4.0.0
+	 */
+	AWS_ECS {
+
+		@Override
+		public boolean isDetected(Environment environment) {
+			String awsExecutionEnv = environment.getProperty("AWS_EXECUTION_ENV");
+			return (awsExecutionEnv != null) && awsExecutionEnv.startsWith("AWS_ECS");
+		}
+
 	};
 
 	private static final String PROPERTY_NAME = "spring.main.cloud-platform";
@@ -198,7 +214,7 @@ public enum CloudPlatform {
 		return isEnforced(binder.bind(PROPERTY_NAME, String.class).orElse(null));
 	}
 
-	private boolean isEnforced(String platform) {
+	private boolean isEnforced(@Nullable String platform) {
 		return name().equalsIgnoreCase(platform);
 	}
 
@@ -225,7 +241,7 @@ public enum CloudPlatform {
 	 * @param environment the environment
 	 * @return the {@link CloudPlatform} or {@code null}
 	 */
-	public static CloudPlatform getActive(Environment environment) {
+	public static @Nullable CloudPlatform getActive(@Nullable Environment environment) {
 		if (environment != null) {
 			for (CloudPlatform cloudPlatform : values()) {
 				if (cloudPlatform.isActive(environment)) {

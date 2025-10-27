@@ -69,7 +69,20 @@ class StructuredLogLayoutTests extends AbstractStructuredLoggingTests {
 		Map<String, Object> deserialized = deserialize(json);
 		assertThat(deserialized).containsEntry("ecs", Map.of("version", "8.11"));
 		Map<String, Object> error = (Map<String, Object>) deserialized.get("error");
+		assertThat(error).isNotNull();
 		assertThat(error.get("stack_trace")).isEqualTo("stacktrace:RuntimeException");
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	void shouldOutputNestedAdditionalEcsJson() {
+		this.environment.setProperty("logging.structured.json.add.extra.value", "test");
+		StructuredLogLayout layout = newBuilder().setFormat("ecs").build();
+		String json = layout.toSerializable(createEvent(new RuntimeException("Boom!")));
+		Map<String, Object> deserialized = deserialize(json);
+		assertThat(deserialized).containsKey("extra");
+		assertThat((Map<String, Object>) deserialized.get("extra")).containsEntry("value", "test");
+		System.out.println(deserialized);
 	}
 
 	@Test

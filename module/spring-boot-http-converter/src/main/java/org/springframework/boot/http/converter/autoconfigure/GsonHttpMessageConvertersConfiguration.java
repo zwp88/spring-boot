@@ -28,6 +28,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Conditional;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.converter.json.GsonHttpMessageConverter;
+import org.springframework.http.converter.json.JacksonJsonHttpMessageConverter;
 
 /**
  * Configuration for HTTP Message converters that use Gson.
@@ -79,9 +80,14 @@ class GsonHttpMessageConvertersConfiguration {
 			super(ConfigurationPhase.REGISTER_BEAN);
 		}
 
-		@SuppressWarnings({ "deprecation", "removal" })
-		@ConditionalOnBean(org.springframework.http.converter.json.MappingJackson2HttpMessageConverter.class)
+		@ConditionalOnBean(JacksonJsonHttpMessageConverter.class)
 		static class JacksonAvailable {
+
+		}
+
+		@SuppressWarnings("removal")
+		@ConditionalOnBean(org.springframework.http.converter.json.MappingJackson2HttpMessageConverter.class)
+		static class Jackson2Available {
 
 		}
 

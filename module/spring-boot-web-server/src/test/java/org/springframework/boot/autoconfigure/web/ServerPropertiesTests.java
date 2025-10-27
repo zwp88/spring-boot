@@ -20,6 +20,7 @@ import java.net.InetAddress;
 import java.util.Collections;
 import java.util.Map;
 
+import org.apache.coyote.http11.Http11Nio2Protocol;
 import org.junit.jupiter.api.Test;
 
 import org.springframework.boot.context.properties.bind.Bindable;
@@ -64,7 +65,9 @@ class ServerPropertiesTests {
 	@Test
 	void testPortBinding() {
 		bind("server.port", "9000");
-		assertThat(this.properties.getPort().intValue()).isEqualTo(9000);
+		Integer port = this.properties.getPort();
+		assertThat(port).isNotNull();
+		assertThat(port.intValue()).isEqualTo(9000);
 	}
 
 	@Test
@@ -138,6 +141,12 @@ class ServerPropertiesTests {
 	void testCustomizeMaxHttpRequestHeaderSizeUseBytesByDefault() {
 		bind("server.max-http-request-header-size", "1024");
 		assertThat(this.properties.getMaxHttpRequestHeaderSize()).isEqualTo(DataSize.ofKilobytes(1));
+	}
+
+	@Test
+	void defaultMaxHttpRequestHeaderSizeMatchesTomcatsDefault() {
+		assertThat(this.properties.getMaxHttpRequestHeaderSize().toBytes())
+			.isEqualTo(new Http11Nio2Protocol().getMaxHttpRequestHeaderSize());
 	}
 
 	private void bind(String name, String value) {

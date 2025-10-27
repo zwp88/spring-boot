@@ -25,13 +25,15 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
+import org.jspecify.annotations.Nullable;
+
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.AnyNestedCondition;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.PropertyMapper;
-import org.springframework.boot.security.autoconfigure.ConditionalOnDefaultWebSecurity;
+import org.springframework.boot.security.autoconfigure.web.servlet.ConditionalOnDefaultWebSecurity;
 import org.springframework.boot.security.oauth2.server.resource.autoconfigure.ConditionalOnIssuerLocationJwtDecoder;
 import org.springframework.boot.security.oauth2.server.resource.autoconfigure.ConditionalOnPublicKeyJwtDecoder;
 import org.springframework.boot.security.oauth2.server.resource.autoconfigure.OAuth2ResourceServerProperties;
@@ -53,6 +55,7 @@ import org.springframework.security.oauth2.jwt.SupplierJwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.util.Assert;
 import org.springframework.util.CollectionUtils;
 
 import static org.springframework.security.config.Customizer.withDefaults;
@@ -124,7 +127,7 @@ class OAuth2ResourceServerJwtConfiguration {
 			return new JwtClaimValidator<>(JwtClaimNames.AUD, (aud) -> nullSafeDisjoint(aud, audiences));
 		}
 
-		private boolean nullSafeDisjoint(List<String> c1, List<String> c2) {
+		private boolean nullSafeDisjoint(@Nullable List<String> c1, List<String> c2) {
 			return c1 != null && !Collections.disjoint(c1, c2);
 		}
 
@@ -161,6 +164,7 @@ class OAuth2ResourceServerJwtConfiguration {
 		SupplierJwtDecoder jwtDecoderByIssuerUri(ObjectProvider<JwkSetUriJwtDecoderBuilderCustomizer> customizers) {
 			return new SupplierJwtDecoder(() -> {
 				String issuerUri = this.properties.getIssuerUri();
+				Assert.state(issuerUri != null, "'issuerUri' must not be null");
 				JwkSetUriJwtDecoderBuilder builder = NimbusJwtDecoder.withIssuerLocation(issuerUri);
 				customizers.orderedStream().forEach((customizer) -> customizer.customize(builder));
 				NimbusJwtDecoder jwtDecoder = builder.build();
@@ -177,7 +181,7 @@ class OAuth2ResourceServerJwtConfiguration {
 
 		@Bean
 		@ConditionalOnBean(JwtDecoder.class)
-		SecurityFilterChain jwtSecurityFilterChain(HttpSecurity http) throws Exception {
+		SecurityFilterChain jwtSecurityFilterChain(HttpSecurity http) {
 			http.authorizeHttpRequests((requests) -> requests.anyRequest().authenticated());
 			http.oauth2ResourceServer((resourceServer) -> resourceServer.jwt(withDefaults()));
 			return http.build();
@@ -199,7 +203,7 @@ class OAuth2ResourceServerJwtConfiguration {
 		@Bean
 		JwtAuthenticationConverter getJwtAuthenticationConverter() {
 			JwtGrantedAuthoritiesConverter grantedAuthoritiesConverter = new JwtGrantedAuthoritiesConverter();
-			PropertyMapper map = PropertyMapper.get().alwaysApplyingWhenNonNull();
+			PropertyMapper map = PropertyMapper.get();
 			map.from(this.properties.getAuthorityPrefix()).to(grantedAuthoritiesConverter::setAuthorityPrefix);
 			map.from(this.properties.getAuthoritiesClaimDelimiter())
 				.to(grantedAuthoritiesConverter::setAuthoritiesClaimDelimiter);

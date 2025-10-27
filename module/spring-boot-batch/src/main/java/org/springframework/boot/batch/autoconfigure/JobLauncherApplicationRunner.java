@@ -23,6 +23,7 @@ import java.util.Properties;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.jspecify.annotations.Nullable;
 
 import org.springframework.batch.core.configuration.JobRegistry;
 import org.springframework.batch.core.converter.DefaultJobParametersConverter;
@@ -30,13 +31,12 @@ import org.springframework.batch.core.converter.JobParametersConverter;
 import org.springframework.batch.core.job.Job;
 import org.springframework.batch.core.job.JobExecution;
 import org.springframework.batch.core.job.JobExecutionException;
+import org.springframework.batch.core.job.parameters.InvalidJobParametersException;
 import org.springframework.batch.core.job.parameters.JobParameters;
-import org.springframework.batch.core.job.parameters.JobParametersInvalidException;
+import org.springframework.batch.core.launch.JobExecutionAlreadyRunningException;
+import org.springframework.batch.core.launch.JobInstanceAlreadyCompleteException;
 import org.springframework.batch.core.launch.JobOperator;
-import org.springframework.batch.core.launch.NoSuchJobException;
-import org.springframework.batch.core.repository.JobExecutionAlreadyRunningException;
-import org.springframework.batch.core.repository.JobInstanceAlreadyCompleteException;
-import org.springframework.batch.core.repository.JobRestartException;
+import org.springframework.batch.core.launch.JobRestartException;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.ApplicationArguments;
@@ -74,14 +74,15 @@ public class JobLauncherApplicationRunner
 
 	private final JobOperator jobOperator;
 
-	private JobRegistry jobRegistry;
+	private @Nullable JobRegistry jobRegistry;
 
-	private String jobName;
+	private @Nullable String jobName;
 
 	private Collection<Job> jobs = Collections.emptySet();
 
 	private int order = DEFAULT_ORDER;
 
+	@SuppressWarnings("NullAway.Init")
 	private ApplicationEventPublisher publisher;
 
 	/**
@@ -144,7 +145,8 @@ public class JobLauncherApplicationRunner
 
 	public void run(String... args) throws JobExecutionException {
 		logger.info("Running default command line with: " + Arrays.asList(args));
-		launchJobFromProperties(StringUtils.splitArrayElementsIntoProperties(args, "="));
+		Properties properties = StringUtils.splitArrayElementsIntoProperties(args, "=");
+		launchJobFromProperties((properties != null) ? properties : new Properties());
 	}
 
 	protected void launchJobFromProperties(Properties properties) throws JobExecutionException {
@@ -177,14 +179,14 @@ public class JobLauncherApplicationRunner
 		if (this.jobRegistry != null && StringUtils.hasText(this.jobName)) {
 			if (!isLocalJob(this.jobName)) {
 				Job job = this.jobRegistry.getJob(this.jobName);
+				Assert.notNull(job, () -> "No job found with name '" + this.jobName + "'");
 				execute(job, jobParameters);
 			}
 		}
 	}
 
-	protected void execute(Job job, JobParameters jobParameters)
-			throws JobExecutionAlreadyRunningException, NoSuchJobException, JobRestartException,
-			JobInstanceAlreadyCompleteException, JobParametersInvalidException {
+	protected void execute(Job job, JobParameters jobParameters) throws JobExecutionAlreadyRunningException,
+			JobRestartException, JobInstanceAlreadyCompleteException, InvalidJobParametersException {
 		JobExecution execution = this.jobOperator.start(job, jobParameters);
 		if (this.publisher != null) {
 			this.publisher.publishEvent(new JobExecutionEvent(execution));

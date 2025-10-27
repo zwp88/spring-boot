@@ -33,6 +33,7 @@ import org.flywaydb.core.api.resource.LoadableResource;
 import org.flywaydb.core.internal.resource.classpath.ClassPathResource;
 import org.flywaydb.core.internal.scanner.Scanner;
 import org.flywaydb.core.internal.util.StringUtils;
+import org.jspecify.annotations.Nullable;
 
 import org.springframework.core.NativeDetector;
 import org.springframework.core.io.Resource;
@@ -74,7 +75,7 @@ class NativeImageResourceProvider implements ResourceProvider {
 	}
 
 	@Override
-	public LoadableResource getResource(String name) {
+	public @Nullable LoadableResource getResource(String name) {
 		if (!NativeDetector.inNativeImage()) {
 			return this.scanner.getResource(name);
 		}
@@ -106,7 +107,7 @@ class NativeImageResourceProvider implements ResourceProvider {
 
 	private ClassPathResource asClassPathResource(LocatedResource locatedResource) {
 		Location location = locatedResource.location();
-		String fileNameWithAbsolutePath = location.getPath() + "/" + locatedResource.resource().getFilename();
+		String fileNameWithAbsolutePath = location.getRootPath() + "/" + locatedResource.resource().getFilename();
 		return new ClassPathResource(location, fileNameWithAbsolutePath, this.classLoader, this.encoding);
 	}
 
@@ -123,6 +124,7 @@ class NativeImageResourceProvider implements ResourceProvider {
 		}
 	}
 
+	@SuppressWarnings("deprecation")
 	private void initialize() {
 		PathMatchingResourcePatternResolver resolver = new PathMatchingResourcePatternResolver();
 		for (Location location : this.locations) {

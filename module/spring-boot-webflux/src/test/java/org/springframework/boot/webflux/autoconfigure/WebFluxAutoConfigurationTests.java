@@ -38,11 +38,13 @@ import org.aspectj.lang.annotation.AfterReturning;
 import org.aspectj.lang.annotation.Aspect;
 import org.assertj.core.api.Assertions;
 import org.assertj.core.api.InstanceOfAssertFactories;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledForJreRange;
 import org.junit.jupiter.api.condition.JRE;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import reactor.core.publisher.Mono;
 
 import org.springframework.aop.support.AopUtils;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
@@ -85,11 +87,18 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.util.StringUtils;
 import org.springframework.validation.Validator;
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
+import org.springframework.web.accept.ApiVersionParser;
+import org.springframework.web.accept.InvalidApiVersionException;
+import org.springframework.web.accept.MissingApiVersionException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.filter.reactive.HiddenHttpMethodFilter;
 import org.springframework.web.method.ControllerAdviceBean;
 import org.springframework.web.reactive.HandlerMapping;
+import org.springframework.web.reactive.accept.ApiVersionDeprecationHandler;
+import org.springframework.web.reactive.accept.ApiVersionResolver;
+import org.springframework.web.reactive.accept.DefaultApiVersionStrategy;
 import org.springframework.web.reactive.accept.RequestedContentTypeResolver;
+import org.springframework.web.reactive.accept.StandardApiVersionDeprecationHandler;
 import org.springframework.web.reactive.config.BlockingExecutionConfigurer;
 import org.springframework.web.reactive.config.DelegatingWebFluxConfiguration;
 import org.springframework.web.reactive.config.ResourceHandlerRegistration;
@@ -102,6 +111,7 @@ import org.springframework.web.reactive.resource.CachingResourceTransformer;
 import org.springframework.web.reactive.resource.PathResourceResolver;
 import org.springframework.web.reactive.resource.ResourceWebHandler;
 import org.springframework.web.reactive.result.method.HandlerMethodArgumentResolver;
+import org.springframework.web.reactive.result.method.annotation.ArgumentResolverConfigurer;
 import org.springframework.web.reactive.result.method.annotation.RequestMappingHandlerAdapter;
 import org.springframework.web.reactive.result.method.annotation.RequestMappingHandlerMapping;
 import org.springframework.web.reactive.result.method.annotation.ResponseEntityExceptionHandler;
@@ -122,6 +132,7 @@ import org.springframework.web.server.session.WebSessionStore;
 import org.springframework.web.util.pattern.PathPattern;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.mock;
@@ -170,8 +181,10 @@ class WebFluxAutoConfigurationTests {
 	void shouldRegisterCustomHandlerMethodArgumentResolver() {
 		this.contextRunner.withUserConfiguration(CustomArgumentResolvers.class).run((context) -> {
 			RequestMappingHandlerAdapter adapter = context.getBean(RequestMappingHandlerAdapter.class);
+			ArgumentResolverConfigurer configurer = adapter.getArgumentResolverConfigurer();
+			assertThat(configurer).isNotNull();
 			List<HandlerMethodArgumentResolver> customResolvers = (List<HandlerMethodArgumentResolver>) ReflectionTestUtils
-				.getField(adapter.getArgumentResolverConfigurer(), "customResolvers");
+				.getField(configurer, "customResolvers");
 			assertThat(customResolvers).contains(context.getBean("firstResolver", HandlerMethodArgumentResolver.class),
 					context.getBean("secondResolver", HandlerMethodArgumentResolver.class));
 		});
@@ -556,9 +569,9 @@ class WebFluxAutoConfigurationTests {
 	void whenFixedLocalContextResolverIsUsedThenAcceptLanguagesHeaderIsIgnored() {
 		this.contextRunner.withPropertyValues("spring.web.locale:en_UK", "spring.web.locale-resolver=fixed")
 			.run((context) -> {
-				MockServerHttpRequest request = MockServerHttpRequest.get("/")
-					.acceptLanguageAsLocales(StringUtils.parseLocaleString("nl_NL"))
-					.build();
+				Locale locale = StringUtils.parseLocaleString("nl_NL");
+				assertThat(locale).isNotNull();
+				MockServerHttpRequest request = MockServerHttpRequest.get("/").acceptLanguageAsLocales(locale).build();
 				MockServerWebExchange exchange = MockServerWebExchange.from(request);
 				LocaleContextResolver localeContextResolver = context.getBean(LocaleContextResolver.class);
 				assertThat(localeContextResolver).isInstanceOf(FixedLocaleContextResolver.class);
@@ -570,14 +583,14 @@ class WebFluxAutoConfigurationTests {
 	@Test
 	void whenAcceptHeaderLocaleContextResolverIsUsedThenAcceptLanguagesHeaderIsHonoured() {
 		this.contextRunner.withPropertyValues("spring.web.locale:en_UK").run((context) -> {
-			MockServerHttpRequest request = MockServerHttpRequest.get("/")
-				.acceptLanguageAsLocales(StringUtils.parseLocaleString("nl_NL"))
-				.build();
+			Locale locale = StringUtils.parseLocaleString("nl_NL");
+			assertThat(locale).isNotNull();
+			MockServerHttpRequest request = MockServerHttpRequest.get("/").acceptLanguageAsLocales(locale).build();
 			MockServerWebExchange exchange = MockServerWebExchange.from(request);
 			LocaleContextResolver localeContextResolver = context.getBean(LocaleContextResolver.class);
 			assertThat(localeContextResolver).isInstanceOf(AcceptHeaderLocaleContextResolver.class);
 			LocaleContext localeContext = localeContextResolver.resolveLocaleContext(exchange);
-			assertThat(localeContext.getLocale()).isEqualTo(StringUtils.parseLocaleString("nl_NL"));
+			assertThat(localeContext.getLocale()).isEqualTo(locale);
 		});
 	}
 
@@ -666,12 +679,15 @@ class WebFluxAutoConfigurationTests {
 			.run(assertExchangeWithSession((exchange) -> {
 				List<ResponseCookie> cookies = exchange.getResponse().getCookies().get("JSESSIONID");
 				assertThat(cookies).isNotEmpty();
-				assertThat(cookies).allMatch((cookie) -> cookie.getDomain().equals(".example.com"));
-				assertThat(cookies).allMatch((cookie) -> cookie.getPath().equals("/example"));
+				assertThat(cookies)
+					.allMatch((cookie) -> cookie.getDomain() != null && cookie.getDomain().equals(".example.com"));
+				assertThat(cookies)
+					.allMatch((cookie) -> cookie.getPath() != null && cookie.getPath().equals("/example"));
 				assertThat(cookies).allMatch((cookie) -> cookie.getMaxAge().equals(Duration.ofSeconds(60)));
 				assertThat(cookies).allMatch((cookie) -> !cookie.isHttpOnly());
 				assertThat(cookies).allMatch((cookie) -> !cookie.isSecure());
-				assertThat(cookies).allMatch((cookie) -> cookie.getSameSite().equals("Strict"));
+				assertThat(cookies)
+					.allMatch((cookie) -> cookie.getSameSite() != null && cookie.getSameSite().equals("Strict"));
 				assertThat(cookies).allMatch(ResponseCookie::isPartitioned);
 			}));
 	}
@@ -792,6 +808,105 @@ class WebFluxAutoConfigurationTests {
 			});
 	}
 
+	@Test
+	void apiVersionPropertiesAreApplied() {
+		this.contextRunner
+			.withPropertyValues("spring.webflux.apiversion.use.header=version",
+					"spring.webflux.apiversion.required=true", "spring.webflux.apiversion.supported=123,456",
+					"spring.webflux.apiversion.detect-supported=false")
+			.run((context) -> {
+				DefaultApiVersionStrategy versionStrategy = context.getBean("webFluxApiVersionStrategy",
+						DefaultApiVersionStrategy.class);
+				MockServerWebExchange request = MockServerWebExchange
+					.from(MockServerHttpRequest.get("https://example.com"));
+				assertThatExceptionOfType(MissingApiVersionException.class)
+					.isThrownBy(() -> versionStrategy.validateVersion(null, request));
+				assertThatExceptionOfType(InvalidApiVersionException.class)
+					.isThrownBy(() -> versionStrategy.validateVersion(versionStrategy.parseVersion("789"),
+							MockServerWebExchange.from(MockServerHttpRequest.get("https://example.com"))));
+				assertThat(versionStrategy.detectSupportedVersions()).isFalse();
+			});
+	}
+
+	@Test
+	void apiVersionDefaultVersionPropertyIsApplied() {
+		this.contextRunner
+			.withPropertyValues("spring.webflux.apiversion.use.header=version",
+					"spring.webflux.apiversion.default=1.0.0")
+			.run((context) -> {
+				DefaultApiVersionStrategy versionStrategy = context.getBean("webFluxApiVersionStrategy",
+						DefaultApiVersionStrategy.class);
+				MockServerWebExchange request = MockServerWebExchange
+					.from(MockServerHttpRequest.get("https://example.com"));
+				versionStrategy.addSupportedVersion("1.0.0");
+				Comparable<?> version = versionStrategy.parseVersion("1.0.0");
+				assertThat(versionStrategy.getDefaultVersion()).isEqualTo(version);
+				versionStrategy.validateVersion(version, request);
+				versionStrategy.validateVersion(null, request);
+			});
+	}
+
+	@Test
+	void apiVersionUseHeaderPropertyIsApplied() {
+		this.contextRunner.withPropertyValues("spring.webflux.apiversion.use.header=hv").run((context) -> {
+			DefaultApiVersionStrategy versionStrategy = context.getBean("webFluxApiVersionStrategy",
+					DefaultApiVersionStrategy.class);
+			MockServerWebExchange request = MockServerWebExchange
+				.from(MockServerHttpRequest.get("https://example.com").header("hv", "123"));
+			assertThat(versionStrategy.resolveVersion(request)).isEqualTo("123");
+		});
+	}
+
+	@Test
+	void apiVersionUseQueryParameterPropertyIsApplied() {
+		this.contextRunner.withPropertyValues("spring.webflux.apiversion.use.query-parameter=rpv").run((context) -> {
+			DefaultApiVersionStrategy versionStrategy = context.getBean("webFluxApiVersionStrategy",
+					DefaultApiVersionStrategy.class);
+			MockServerWebExchange request = MockServerWebExchange
+				.from(MockServerHttpRequest.get("https://example.com?rpv=123"));
+			assertThat(versionStrategy.resolveVersion(request)).isEqualTo("123");
+		});
+	}
+
+	@Test
+	void apiVersionUsePathSegmentPropertyIsApplied() {
+		this.contextRunner.withPropertyValues("spring.webflux.apiversion.use.path-segment=1").run((context) -> {
+			DefaultApiVersionStrategy versionStrategy = context.getBean("webFluxApiVersionStrategy",
+					DefaultApiVersionStrategy.class);
+			MockServerWebExchange request = MockServerWebExchange
+				.from(MockServerHttpRequest.get("https://example.com/test/123"));
+			assertThat(versionStrategy.resolveVersion(request)).isEqualTo("123");
+		});
+	}
+
+	@Test
+	void apiVersionUseMediaTypeParameterPropertyIsApplied() {
+		this.contextRunner
+			.withPropertyValues("spring.webflux.apiversion.use.media-type-parameter[application/json]=mtpv")
+			.run((context) -> {
+				DefaultApiVersionStrategy versionStrategy = context.getBean("webFluxApiVersionStrategy",
+						DefaultApiVersionStrategy.class);
+				MockServerWebExchange request = MockServerWebExchange
+					.from(MockServerHttpRequest.get("https://example.com")
+						.header("content-type", "application/json;mtpv=123"));
+				assertThat(versionStrategy.resolveVersion(request)).isEqualTo("123");
+			});
+	}
+
+	@Test
+	void apiVersionBeansAreInjected() {
+		this.contextRunner.withUserConfiguration(ApiVersionConfiguration.class).run((context) -> {
+			DefaultApiVersionStrategy versionStrategy = context.getBean("webFluxApiVersionStrategy",
+					DefaultApiVersionStrategy.class);
+			assertThat(versionStrategy).extracting("versionResolvers")
+				.asInstanceOf(InstanceOfAssertFactories.LIST)
+				.containsExactly(context.getBean(ApiVersionResolver.class));
+			assertThat(versionStrategy).extracting("deprecationHandler")
+				.isEqualTo(context.getBean(ApiVersionDeprecationHandler.class));
+			assertThat(versionStrategy).extracting("versionParser").isEqualTo(context.getBean(ApiVersionParser.class));
+		});
+	}
+
 	private ContextConsumer<ReactiveWebApplicationContext> assertExchangeWithSession(
 			Consumer<MockServerWebExchange> exchange) {
 		return (context) -> {
@@ -799,6 +914,7 @@ class WebFluxAutoConfigurationTests {
 			MockServerWebExchange webExchange = MockServerWebExchange.from(request);
 			WebSessionManager webSessionManager = context.getBean(WebSessionManager.class);
 			WebSession webSession = webSessionManager.getSession(webExchange).block();
+			assertThat(webSession).isNotNull();
 			webSession.start();
 			webExchange.getResponse().setComplete().block();
 			exchange.accept(webExchange);
@@ -917,7 +1033,7 @@ class WebFluxAutoConfigurationTests {
 
 		@Bean
 		HttpHandler httpHandler() {
-			return (serverHttpRequest, serverHttpResponse) -> null;
+			return (serverHttpRequest, serverHttpResponse) -> Mono.empty();
 		}
 
 	}
@@ -1091,7 +1207,7 @@ class WebFluxAutoConfigurationTests {
 		}
 
 		@Override
-		public void setLocaleContext(ServerWebExchange exchange, LocaleContext localeContext) {
+		public void setLocaleContext(ServerWebExchange exchange, @Nullable LocaleContext localeContext) {
 		}
 
 	}
@@ -1183,6 +1299,26 @@ class WebFluxAutoConfigurationTests {
 		@Override
 		public void configureBlockingExecution(BlockingExecutionConfigurer configurer) {
 			configurer.setExecutor(this.taskExecutor);
+		}
+
+	}
+
+	@Configuration(proxyBeanMethods = false)
+	static class ApiVersionConfiguration {
+
+		@Bean
+		ApiVersionResolver apiVersionResolver() {
+			return (request) -> "latest";
+		}
+
+		@Bean
+		ApiVersionDeprecationHandler apiVersionDeprecationHandler(ApiVersionParser<?> apiVersionParser) {
+			return new StandardApiVersionDeprecationHandler(apiVersionParser);
+		}
+
+		@Bean
+		ApiVersionParser<String> apiVersionParser() {
+			return (version) -> String.valueOf(version);
 		}
 
 	}

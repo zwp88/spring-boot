@@ -28,6 +28,8 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 
+import org.jspecify.annotations.Nullable;
+
 import org.springframework.boot.context.annotation.ImportCandidates;
 import org.springframework.core.io.UrlResource;
 import org.springframework.util.Assert;
@@ -79,7 +81,7 @@ final class AutoConfigurationReplacements {
 	}
 
 	/**
-	 * Loads the relocations from the classpath. Relactions are stored in files named
+	 * Loads the relocations from the classpath. Relocations are stored in files named
 	 * {@code META-INF/spring/full-qualified-annotation-name.replacements} on the
 	 * classpath. The file is loaded using {@link Properties#load(java.io.InputStream)}
 	 * with each entry containing an auto-configuration class name as the key and the
@@ -88,7 +90,7 @@ final class AutoConfigurationReplacements {
 	 * @param classLoader class loader to use for loading
 	 * @return list of names of annotated classes
 	 */
-	static AutoConfigurationReplacements load(Class<?> annotation, ClassLoader classLoader) {
+	static AutoConfigurationReplacements load(Class<?> annotation, @Nullable ClassLoader classLoader) {
 		Assert.notNull(annotation, "'annotation' must not be null");
 		ClassLoader classLoaderToUse = decideClassloader(classLoader);
 		String location = String.format(LOCATION, annotation.getName());
@@ -101,7 +103,7 @@ final class AutoConfigurationReplacements {
 		return new AutoConfigurationReplacements(replacements);
 	}
 
-	private static ClassLoader decideClassloader(ClassLoader classLoader) {
+	private static ClassLoader decideClassloader(@Nullable ClassLoader classLoader) {
 		if (classLoader == null) {
 			return ImportCandidates.class.getClassLoader();
 		}

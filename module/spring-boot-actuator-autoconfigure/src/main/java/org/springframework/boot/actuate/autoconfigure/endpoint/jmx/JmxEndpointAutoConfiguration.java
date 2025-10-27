@@ -19,6 +19,7 @@ package org.springframework.boot.actuate.autoconfigure.endpoint.jmx;
 import javax.management.MBeanServer;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.LazyInitializationExcludeFilter;
@@ -42,7 +43,9 @@ import org.springframework.boot.actuate.endpoint.jmx.annotation.JmxEndpointDisco
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnSingleCandidate;
 import org.springframework.boot.autoconfigure.condition.SearchStrategy;
 import org.springframework.boot.autoconfigure.jmx.JmxAutoConfiguration;
@@ -50,6 +53,7 @@ import org.springframework.boot.autoconfigure.jmx.JmxProperties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.util.ObjectUtils;
 
 /**
@@ -64,7 +68,7 @@ import org.springframework.util.ObjectUtils;
 @AutoConfiguration(after = { JmxAutoConfiguration.class, EndpointAutoConfiguration.class })
 @EnableConfigurationProperties({ JmxEndpointProperties.class, JmxProperties.class })
 @ConditionalOnBooleanProperty("spring.jmx.enabled")
-public class JmxEndpointAutoConfiguration {
+public final class JmxEndpointAutoConfiguration {
 
 	private final ApplicationContext applicationContext;
 
@@ -72,7 +76,7 @@ public class JmxEndpointAutoConfiguration {
 
 	private final JmxProperties jmxProperties;
 
-	public JmxEndpointAutoConfiguration(ApplicationContext applicationContext, JmxEndpointProperties properties,
+	JmxEndpointAutoConfiguration(ApplicationContext applicationContext, JmxEndpointProperties properties,
 			JmxProperties jmxProperties) {
 		this.applicationContext = applicationContext;
 		this.properties = properties;
@@ -81,7 +85,7 @@ public class JmxEndpointAutoConfiguration {
 
 	@Bean
 	@ConditionalOnMissingBean(JmxEndpointsSupplier.class)
-	public JmxEndpointDiscoverer jmxAnnotationEndpointDiscoverer(ParameterValueMapper parameterValueMapper,
+	JmxEndpointDiscoverer jmxAnnotationEndpointDiscoverer(ParameterValueMapper parameterValueMapper,
 			ObjectProvider<OperationInvokerAdvisor> invokerAdvisors,
 			ObjectProvider<EndpointFilter<ExposableJmxEndpoint>> endpointFilters,
 			ObjectProvider<OperationFilter<JmxOperation>> operationFilters) {
@@ -92,25 +96,13 @@ public class JmxEndpointAutoConfiguration {
 
 	@Bean
 	@ConditionalOnMissingBean(value = EndpointObjectNameFactory.class, search = SearchStrategy.CURRENT)
-	public DefaultEndpointObjectNameFactory endpointObjectNameFactory(MBeanServer mBeanServer) {
+	DefaultEndpointObjectNameFactory endpointObjectNameFactory(MBeanServer mBeanServer) {
 		String contextId = ObjectUtils.getIdentityHexString(this.applicationContext);
 		return new DefaultEndpointObjectNameFactory(this.properties, this.jmxProperties, mBeanServer, contextId);
 	}
 
 	@Bean
-	@ConditionalOnSingleCandidate(MBeanServer.class)
-	public JmxEndpointExporter jmxMBeanExporter(MBeanServer mBeanServer,
-			EndpointObjectNameFactory endpointObjectNameFactory, ObjectProvider<ObjectMapper> objectMapper,
-			JmxEndpointsSupplier jmxEndpointsSupplier) {
-		JmxOperationResponseMapper responseMapper = new JacksonJmxOperationResponseMapper(
-				objectMapper.getIfAvailable());
-		return new JmxEndpointExporter(mBeanServer, endpointObjectNameFactory, responseMapper,
-				jmxEndpointsSupplier.getEndpoints());
-
-	}
-
-	@Bean
-	public IncludeExcludeEndpointFilter<ExposableJmxEndpoint> jmxIncludeExcludePropertyEndpointFilter() {
+	IncludeExcludeEndpointFilter<ExposableJmxEndpoint> jmxIncludeExcludePropertyEndpointFilter() {
 		JmxEndpointProperties.Exposure exposure = this.properties.getExposure();
 		return new IncludeExcludeEndpointFilter<>(ExposableJmxEndpoint.class, exposure.getInclude(),
 				exposure.getExclude(), EndpointExposure.JMX.getDefaultIncludes());
@@ -124,6 +116,43 @@ public class JmxEndpointAutoConfiguration {
 	@Bean
 	OperationFilter<JmxOperation> jmxAccessPropertiesOperationFilter(EndpointAccessResolver endpointAccessResolver) {
 		return OperationFilter.byAccess(endpointAccessResolver);
+	}
+
+	@Configuration(proxyBeanMethods = false)
+	@ConditionalOnClass(JsonMapper.class)
+	static class JmxJacksonEndpointConfiguration {
+
+		@Bean
+		@ConditionalOnSingleCandidate(MBeanServer.class)
+		JmxEndpointExporter jmxMBeanExporter(MBeanServer mBeanServer,
+				EndpointObjectNameFactory endpointObjectNameFactory, ObjectProvider<JsonMapper> jsonMapper,
+				JmxEndpointsSupplier jmxEndpointsSupplier) {
+			JmxOperationResponseMapper responseMapper = new JacksonJmxOperationResponseMapper(
+					jsonMapper.getIfAvailable());
+			return new JmxEndpointExporter(mBeanServer, endpointObjectNameFactory, responseMapper,
+					jmxEndpointsSupplier.getEndpoints());
+		}
+
+	}
+
+	@Configuration(proxyBeanMethods = false)
+	@ConditionalOnClass(ObjectMapper.class)
+	@ConditionalOnMissingClass("tools.jackson.databind.json.JsonMapper")
+	@Deprecated(since = "4.2.0", forRemoval = true)
+	@SuppressWarnings("removal")
+	static class JmxJackson2EndpointConfiguration {
+
+		@Bean
+		@ConditionalOnSingleCandidate(MBeanServer.class)
+		JmxEndpointExporter jmxMBeanExporter(MBeanServer mBeanServer,
+				EndpointObjectNameFactory endpointObjectNameFactory, ObjectProvider<ObjectMapper> objectMapper,
+				JmxEndpointsSupplier jmxEndpointsSupplier) {
+			JmxOperationResponseMapper responseMapper = new org.springframework.boot.actuate.endpoint.jmx.Jackson2JmxOperationResponseMapper(
+					objectMapper.getIfAvailable());
+			return new JmxEndpointExporter(mBeanServer, endpointObjectNameFactory, responseMapper,
+					jmxEndpointsSupplier.getEndpoints());
+		}
+
 	}
 
 }

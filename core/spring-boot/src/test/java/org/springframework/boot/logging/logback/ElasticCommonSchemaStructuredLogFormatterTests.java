@@ -58,7 +58,12 @@ class ElasticCommonSchemaStructuredLogFormatterTests extends AbstractStructuredL
 		this.environment.setProperty("logging.structured.ecs.service.node-name", "node-1");
 		this.environment.setProperty("spring.application.pid", "1");
 		this.formatter = new ElasticCommonSchemaStructuredLogFormatter(this.environment, null,
-				TestContextPairs.include(), getThrowableProxyConverter(), this.customizer);
+				TestContextPairs.include(), getThrowableProxyConverter(), this.customizerBuilder);
+	}
+
+	@Test
+	void callsNestedOnCustomizerBuilder() {
+		assertThat(this.customizerBuilder.isNested()).isTrue();
 	}
 
 	@Test
@@ -99,6 +104,7 @@ class ElasticCommonSchemaStructuredLogFormatterTests extends AbstractStructuredL
 		Map<String, Object> expectedError = new HashMap<>();
 		expectedError.put("type", "java.lang.RuntimeException");
 		expectedError.put("message", "Boom");
+		assertThat(error).isNotNull();
 		assertThat(error).containsAllEntriesOf(expectedError);
 		String stackTrace = (String) error.get("stack_trace");
 		assertThat(stackTrace)
@@ -115,12 +121,13 @@ class ElasticCommonSchemaStructuredLogFormatterTests extends AbstractStructuredL
 	@SuppressWarnings("unchecked")
 	void shouldFormatExceptionUsingStackTracePrinter() {
 		this.formatter = new ElasticCommonSchemaStructuredLogFormatter(this.environment, new SimpleStackTracePrinter(),
-				TestContextPairs.include(), getThrowableProxyConverter(), this.customizer);
+				TestContextPairs.include(), getThrowableProxyConverter(), this.customizerBuilder);
 		LoggingEvent event = createEvent();
 		event.setMDCPropertyMap(Collections.emptyMap());
 		event.setThrowableProxy(new ThrowableProxy(new RuntimeException("Boom")));
 		Map<String, Object> deserialized = deserialize(this.formatter.format(event));
 		Map<String, Object> error = (Map<String, Object>) deserialized.get("error");
+		assertThat(error).isNotNull();
 		String stackTrace = (String) error.get("stack_trace");
 		assertThat(stackTrace).isEqualTo("stacktrace:RuntimeException");
 	}

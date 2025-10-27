@@ -21,8 +21,7 @@ plugins {
 description = "Spring Boot Test no Mockito smoke test"
 
 dependencies {
-	implementation(project(":starter:spring-boot-starter"))
-	implementation(project(":starter:spring-boot-starter-web"))
+	implementation(project(":starter:spring-boot-starter-webmvc"))
 
 	runtimeOnly("com.h2database:h2")
 
@@ -30,4 +29,8 @@ dependencies {
 	testImplementation("org.assertj:assertj-core")
 	testImplementation("org.junit.jupiter:junit-jupiter")
 	testImplementation("org.springframework:spring-test")
+}
+
+tasks.named("compileTestJava") {
+	options.nullability.checking = "tests"
 }
